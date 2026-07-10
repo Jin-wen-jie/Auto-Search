@@ -94,7 +94,7 @@ function tryOpenGraph($: cheerio.CheerioAPI): ExtractedProduct {
 
 function tryDom(
   $: cheerio.CheerioAPI,
-  pageUrl: string,
+  _pageUrl: string,
 ): ExtractedProduct {
   const title = $("h1").first().text().trim() || $("title").text().trim() ||
     null;

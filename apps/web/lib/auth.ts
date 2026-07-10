@@ -13,7 +13,7 @@ export interface LoginPolicyResult {
 }
 
 const MAX_FAILED_ATTEMPTS = 5;
-const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+// Lock duration: 15 minutes, applied externally when setting lockedUntil
 
 export function loginPolicy(
   account: AccountState,
@@ -63,7 +63,7 @@ export function assertCsrf(
 
 // ── Cookie helpers ──
 
-export const SESSION_COOKIE = "__Host-admin_session";
+export const SESSION_COOKIE = "admin_session";
 
 export function sessionCookieOptions(secure: boolean) {
   return {

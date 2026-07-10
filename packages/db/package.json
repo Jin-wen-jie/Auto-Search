@@ -6,6 +6,7 @@
   "main": "./src/client.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings 0",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
@@ -19,7 +20,7 @@
   "devDependencies": {
     "@types/node": "24.10.3",
     "drizzle-kit": "0.31.7",
-    "typescript": "7.0.2",
+    "typescript": "5.8.3",
     "vitest": "4.1.10"
   }
 }

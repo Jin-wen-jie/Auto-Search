@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ExternalLink as LinkIcon } from "lucide-react";
 
 export function ExternalLink({

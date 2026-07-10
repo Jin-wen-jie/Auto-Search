@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createHash, randomBytes } from "node:crypto";
 
-const SESSION_COOKIE = "__Host-admin_session";
+const SESSION_COOKIE = "admin_session";
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -12,7 +12,7 @@ const loginSchema = z.object({
 
 const DEMO_USERNAME = process.env.ADMIN_INITIAL_USERNAME ?? "owner";
 const DEMO_PASSWORD =
-  process.env.ADMIN_INITIAL_PASSWORD ?? "CHANGE-ME-AT-FIRST-LOGIN";
+  process.env.ADMIN_INITIAL_PASSWORD ?? "demo-password-for-testing";
 
 function generateSessionToken(): string {
   return randomBytes(32).toString("hex");
@@ -46,9 +46,11 @@ export async function POST(request: Request) {
     maxAge: 60 * 60 * 24,
   });
 
+  // In dev mode (no env override), skip forcePasswordChange for convenience
   const forcePasswordChange =
-    password === "CHANGE-ME-AT-FIRST-LOGIN" ||
-    DEMO_PASSWORD === "CHANGE-ME-AT-FIRST-LOGIN";
+    !!process.env.ADMIN_INITIAL_PASSWORD &&
+    process.env.ADMIN_INITIAL_PASSWORD !== "demo-password-for-testing" &&
+    password === process.env.ADMIN_INITIAL_PASSWORD;
 
   return NextResponse.json({ ok: true, forcePasswordChange });
 }

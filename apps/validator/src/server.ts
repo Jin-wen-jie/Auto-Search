@@ -80,5 +80,6 @@ if (isMain) {
   const server = await buildServer();
   const port = Number.parseInt(process.env.PORT ?? "3001", 10);
   await server.listen({ port, host: "0.0.0.0" });
+  // eslint-disable-next-line no-console
   console.log(`Validator listening on port ${port}`);
 }

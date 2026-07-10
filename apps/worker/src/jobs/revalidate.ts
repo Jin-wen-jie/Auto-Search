@@ -1,8 +1,8 @@
-import { QUEUES, getQueueConfig } from "./queue.js";
-import type { CheckFailureKind } from "./lifecycle.js";
-import { transitionListing } from "./lifecycle.js";
-import { validateUrl } from "./validator-client.js";
-import type { ValidatorResponse } from "./validator-client.js";
+import { QUEUES, getQueueConfig } from "../queue.js";
+import type { CheckFailureKind } from "../lifecycle.js";
+import { transitionListing } from "../lifecycle.js";
+import { validateUrl } from "../validator-client.js";
+import type { ValidatorResponse } from "../validator-client.js";
 
 export interface JobContext {
   baseUrl: string;
@@ -57,10 +57,11 @@ function classifyFailure(message: string): CheckFailureKind {
 export async function discoverSource(
   sourceId: string,
   platform: string,
-  ctx: JobContext,
+  _ctx: JobContext,
 ): Promise<{ discovered: number; deduped: number; error: string | null }> {
   // In production, this invokes the actual connector (X or Telegram)
   // For now, returns a placeholder result
+  // eslint-disable-next-line no-console
   console.log(`Discovering from ${platform} source ${sourceId}`);
   return { discovered: 0, deduped: 0, error: null };
 }

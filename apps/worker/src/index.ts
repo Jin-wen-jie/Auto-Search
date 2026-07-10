@@ -1,5 +1,4 @@
 import { getQueueConfig } from "./queue.js";
-import { revalidateListing, discoverSource } from "./jobs/revalidate.js";
 
 export interface WorkerConfig {
   validatorBaseUrl: string;
@@ -7,24 +6,23 @@ export interface WorkerConfig {
 }
 
 export async function startWorker(config: WorkerConfig): Promise<void> {
+  // eslint-disable-next-line no-console
   console.log("Worker starting...");
   const queues = getQueueConfig();
+  // eslint-disable-next-line no-console
   console.log(
     `Configured ${queues.length} queues:`,
     queues.map((q) => q.queueName).join(", "),
   );
 
-  const ctx = {
-    baseUrl: config.validatorBaseUrl,
-    token: config.validatorSharedToken,
-  };
-
   // In production: connect to pg-boss and register job handlers
   // For now: log startup
+  // eslint-disable-next-line no-console
   console.log("Worker ready. Validator:", config.validatorBaseUrl);
 
   // Keep process alive
   process.on("SIGTERM", () => {
+    // eslint-disable-next-line no-console
     console.log("Worker shutting down...");
     process.exit(0);
   });
