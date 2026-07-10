@@ -1,0 +1,30 @@
+{
+  "name": "@compare/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@compare/db": "workspace:*",
+    "@compare/domain": "workspace:*",
+    "lucide-react": "0.524.0",
+    "next": "16.0.2",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.3",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
