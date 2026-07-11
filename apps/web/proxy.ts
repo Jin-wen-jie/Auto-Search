@@ -1,35 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const SESSION_COOKIE = "admin_session";
-
+// 单管理员调查后台 — 无需登录
 export default function proxy(request: NextRequest) {
-  const session = request.cookies.get(SESSION_COOKIE);
-  const { pathname } = request.nextUrl;
-
-  // Allow login page and auth API
-  if (
-    pathname === "/login" ||
-    pathname.startsWith("/api/auth/")
-  ) {
-    return NextResponse.next();
-  }
-
-  // Allow public files
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname === "/robots.txt"
-  ) {
-    return NextResponse.next();
-  }
-
-  // Require auth for everything else
-  if (!session?.value) {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
   return NextResponse.next();
 }
 
