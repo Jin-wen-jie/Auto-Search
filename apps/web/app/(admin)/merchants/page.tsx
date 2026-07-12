@@ -18,7 +18,7 @@ export default async function MerchantsPage() {
   const rows = await listMerchantViews();
   return (
     <div>
-      <h2 className="mb-1 text-xl font-bold text-gray-900">商家档案</h2>
+        <h2 className="mb-1 text-xl font-bold text-gray-900">K12 / Bug Team 商家档案</h2>
       <p className="mb-4 text-xs text-gray-500">仅展示经过候选审核后写入 PostgreSQL 的商家，不把公开线索自动认定为商家档案。</p>
       <DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} />
     </div>

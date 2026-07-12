@@ -190,7 +190,7 @@ import { buildComparisonKey, rankPrices, scoreSupply } from "./index";
 
 describe("domain rankings", () => {
   it("keeps shared and exclusive products in separate groups", () => {
-    const base = { provider: "OpenAI", productLine: "ChatGPT", plan: "Plus", delivery: "ACCOUNT", ownership: "TRANSFERRED", region: "NONE", qualification: "NONE", validity: "30d", commitment: "30d", quota: "NOT_APPLICABLE" } as const;
+    const base = { provider: "K12", productLine: "Copilot", plan: "Education", delivery: "ACCOUNT", ownership: "TRANSFERRED", region: "NONE", qualification: "K12", validity: "12m", commitment: "12m", quota: "NOT_APPLICABLE" } as const;
     expect(buildComparisonKey({ ...base, accessMode: "EXCLUSIVE" })).not.toBe(buildComparisonKey({ ...base, accessMode: "SHARED" }));
   });
 

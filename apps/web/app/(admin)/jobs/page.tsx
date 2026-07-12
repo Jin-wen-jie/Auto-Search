@@ -72,9 +72,9 @@ export default async function JobsPage() {
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">采集任务</h2>
+          <h2 className="text-xl font-bold text-gray-900">K12 / Bug Team 采集任务</h2>
           <p className="mt-0.5 text-xs text-gray-500">
-            来源连接器状态基于真实凭据配置。缺少凭据时显示为未配置，不影响手工补链。
+            来源连接器搜索关键词仅覆盖 K12 教育资格和 Bug Team 相关商品。缺少凭据时显示为未配置，不影响手工补链。
           </p>
         </div>
         <ManualUrlForm />

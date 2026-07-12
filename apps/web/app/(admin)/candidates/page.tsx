@@ -107,7 +107,7 @@ export default function CandidatesPage() {
   return (
     <div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-bold text-gray-900">候选审核</h2>
+        <h2 className="text-xl font-bold text-gray-900">K12 / Bug Team 候选审核</h2>
         <form onSubmit={handleAdd} className="flex min-w-0 gap-2 sm:max-w-lg sm:flex-1 sm:justify-end">
           <input type="url" className="min-w-0 flex-1 rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none sm:max-w-sm" placeholder="输入商品 URL 手工补链" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} />
           <button type="submit" disabled={adding || !newUrl} className="rounded bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">添加</button>

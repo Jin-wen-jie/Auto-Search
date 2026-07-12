@@ -4,15 +4,15 @@ import { buildComparisonKey, rankPrices, scoreSupply } from "./index.js";
 describe("domain rankings", () => {
   it("keeps shared and exclusive products in separate groups", () => {
     const base = {
-      provider: "OpenAI",
-      productLine: "ChatGPT",
-      plan: "Plus",
+      provider: "K12",
+      productLine: "Copilot",
+      plan: "Education",
       delivery: "ACCOUNT",
       ownership: "TRANSFERRED",
       region: "NONE",
-      qualification: "NONE",
-      validity: "30d",
-      commitment: "30d",
+      qualification: "K12",
+      validity: "12m",
+      commitment: "12m",
       quota: "NOT_APPLICABLE",
     } as const;
     expect(

@@ -24,8 +24,8 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-xl bg-white p-8 shadow-lg border border-gray-200">
-        <h1 className="mb-1 text-center text-xl font-bold text-gray-900">AI 商品比价后台</h1>
-        <p className="mb-6 text-center text-sm text-gray-500">公开链接调查系统</p>
+        <h1 className="mb-1 text-center text-xl font-bold text-gray-900">K12 / Bug Team 比价后台</h1>
+        <p className="mb-6 text-center text-sm text-gray-500">教育 AI 商品公开链接调查系统</p>
         {error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm font-medium text-red-700">{error}</div>}
         <label className="mb-3 block">
           <span className="text-sm font-semibold text-gray-800">用户名</span>

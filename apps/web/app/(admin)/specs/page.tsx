@@ -17,7 +17,7 @@ export default async function SpecsPage() {
   const rows = await listSpecViews();
   return (
     <div>
-      <h2 className="mb-1 text-xl font-bold text-gray-900">商品规格管理</h2>
+        <h2 className="mb-1 text-xl font-bold text-gray-900">K12 / Bug Team 规格管理</h2>
       <p className="mb-4 text-xs text-gray-500">规格只能由人工审核后的完整字段生成；空白候选不会自动进入比较集合。</p>
       <DataTable columns={columns} rows={rows} getRowKey={(row) => row.id} />
     </div>

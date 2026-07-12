@@ -3,12 +3,12 @@
     {
       "channel": "public_shop",
       "id": 12,
-      "text": "🔥 New stock! GPT Plus 30 days - $19.99\nBuy now: https://shop.example/gpt-plus\nDM for bulk orders"
+      "text": "🔥 New stock! K12 ChatGPT Education - $19.99\nBuy now: https://shop.example/k12-edu\nDM for bulk orders"
     },
     {
       "channel": "ai_deals",
       "id": 45,
-      "text": "Claude Pro accounts available: https://market.example/claude-pro"
+      "text": "Bug Team accounts available: https://market.example/bug-team"
     }
   ]
 }

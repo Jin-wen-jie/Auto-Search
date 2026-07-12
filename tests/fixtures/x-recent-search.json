@@ -2,11 +2,11 @@
   "data": [
     {
       "id": "42",
-      "text": "We have GPT Plus accounts in stock! Check it out: https://shop.example/gpt-plus",
+      "text": "K12 ChatGPT education accounts in stock! Check it out: https://shop.example/k12-edu",
       "entities": {
         "urls": [
           {
-            "expanded_url": "https://shop.example/gpt-plus"
+            "expanded_url": "https://shop.example/k12-edu"
           }
         ]
       }

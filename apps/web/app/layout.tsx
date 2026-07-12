@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Price Intelligence",
-  description: "AI digital goods price comparison admin",
+  title: "K12 / Bug Team Price Intelligence",
+  description: "K12 and Bug Team AI digital goods price comparison admin",
 };
 
 export default function RootLayout({

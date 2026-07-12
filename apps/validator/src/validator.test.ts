@@ -113,11 +113,11 @@ describe("validator", () => {
 
   it("extracts a normal public product", () => {
     const html =
-      '<script type="application/ld+json">{"@type":"Product","name":"GPT Plus 30 days","offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>';
+      '<script type="application/ld+json">{"@type":"Product","name":"K12 ChatGPT Education","offers":{"@type":"Offer","price":"19.99","priceCurrency":"USD","availability":"https://schema.org/InStock"}}</script>';
     expect(
       extractProduct(html, "https://shop.example/product"),
     ).toMatchObject({
-      title: "GPT Plus 30 days",
+      title: "K12 ChatGPT Education",
       price: "19.99",
       currency: "USD",
       availability: "IN_STOCK",

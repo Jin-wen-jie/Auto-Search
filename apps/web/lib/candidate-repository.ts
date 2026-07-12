@@ -36,7 +36,15 @@ export async function listCandidates(): Promise<CandidateView[]> {
 
   return rows
     .map(toCandidateView)
+    .filter((c) => isK12OrBugTeam(c.focus))
     .sort((left, right) => focusPriority(left.focus) - focusPriority(right.focus));
+}
+
+/** Only K12/Bug Team candidates enter the investigation queue. */
+function isK12OrBugTeam(focus: string | null): boolean {
+  // Candidates that haven't been classified yet are allowed through
+  if (focus === null) return true;
+  return focus === "K12" || focus === "Bug Team";
 }
 
 function focusPriority(focus: string | null): number {

@@ -6,7 +6,7 @@ describe("admin read model", () => {
     expect(
       toRankingView({
         id: "listing-1",
-        provider: "OpenAI",
+        provider: "Bug Team",
         productLine: "ChatGPT",
         plan: "Team",
         delivery: "INVITE_SEAT",
@@ -28,7 +28,7 @@ describe("admin read model", () => {
       }),
     ).toEqual({
       id: "listing-1",
-      spec: "OpenAI | ChatGPT | Team | INVITE_SEAT",
+      spec: "Bug Team | ChatGPT | Team | INVITE_SEAT",
       merchant: "公开商铺",
       price: "CNY 120.00",
       totalCny: "¥120.00",
