@@ -36,7 +36,7 @@ function createRepository(): WorkerRepository {
     markCandidateValidating: vi.fn().mockResolvedValue(undefined),
     saveCandidateValidation: vi.fn().mockResolvedValue(undefined),
     saveCandidateFailure: vi.fn().mockResolvedValue(undefined),
-    saveDiscoveredPlatformLinks: vi.fn().mockResolvedValue(0),
+    saveDiscoveredPlatformLinks: vi.fn().mockResolvedValue([]),
     listListingIdsForRevalidation: vi.fn().mockResolvedValue([]),
     getListingForRevalidation: vi.fn().mockResolvedValue(null),
     saveListingRevalidation: vi.fn().mockResolvedValue(undefined),
@@ -82,6 +82,39 @@ describe("worker job handlers", () => {
       "candidate-1",
       failure,
     );
+  });
+
+  it("enqueues the exact candidate ids inserted from discovered links", async () => {
+    const repository = createRepository();
+    vi.mocked(repository.saveDiscoveredPlatformLinks).mockResolvedValue(
+      ["candidate-new-1", "candidate-new-2"],
+    );
+    const enqueue = vi.fn().mockResolvedValue(undefined);
+    const validate = vi.fn().mockResolvedValue({
+      ...validationResult,
+      extraction: {
+        ...validationResult.extraction,
+        platformLinks: [
+          "https://shop.example/item/new-1",
+          "https://shop.example/item/new-2",
+        ],
+      },
+    });
+    const handlers = createJobHandlers({ repository, validate, enqueue });
+
+    await handlers.validateCandidate({ candidateId: "candidate-1" });
+
+    expect(enqueue).toHaveBeenNthCalledWith(
+      1,
+      QUEUES.VALIDATE_CANDIDATE,
+      "candidate-new-1",
+    );
+    expect(enqueue).toHaveBeenNthCalledWith(
+      2,
+      QUEUES.VALIDATE_CANDIDATE,
+      "candidate-new-2",
+    );
+    expect(repository.listCandidateIdsForValidation).not.toHaveBeenCalled();
   });
 
   it("sweeps pending candidates into singleton entity jobs", async () => {

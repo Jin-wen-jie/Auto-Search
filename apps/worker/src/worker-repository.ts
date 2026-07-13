@@ -46,8 +46,20 @@ export function mergeCandidateExtraction(
   };
 }
 
-export function createWorkerRepository(databaseUrl: string): WorkerRepository {
-  return createWorkerRepositoryFromDb(createDb(databaseUrl));
+export interface WorkerRepositoryRuntime extends WorkerRepository {
+  close: () => Promise<void>;
+}
+
+export function createWorkerRepository(
+  databaseUrl: string,
+): WorkerRepositoryRuntime {
+  const db = createDb(databaseUrl);
+  return {
+    ...createWorkerRepositoryFromDb(db),
+    async close() {
+      await db.$client.end({ timeout: 5 });
+    },
+  };
 }
 
 export function createWorkerRepositoryFromDb(db: Db): WorkerRepository {
@@ -174,30 +186,29 @@ export function createWorkerRepositoryFromDb(db: Db): WorkerRepository {
     },
 
     async saveDiscoveredPlatformLinks(links) {
-      let inserted = 0;
+      const insertedIds: string[] = [];
       const now = new Date();
       for (const url of links) {
         const canonicalUrl = canonicalizeUrl(url);
         const urlFingerprint = fingerprintUrl(canonicalUrl);
-        const [existing] = await db
-          .select({ id: discoveryCandidates.id })
-          .from(discoveryCandidates)
-          .where(eq(discoveryCandidates.urlFingerprint, urlFingerprint))
-          .limit(1);
-        if (existing) continue;
-        await db.insert(discoveryCandidates).values({
-          id: randomUUID(),
-          productUrl: canonicalUrl,
-          canonicalUrl,
-          urlFingerprint,
-          sourceType: "manual",
-          status: "DISCOVERED",
-          createdAt: now,
-          updatedAt: now,
-        });
-        inserted++;
+        const id = randomUUID();
+        const [inserted] = await db
+          .insert(discoveryCandidates)
+          .values({
+            id,
+            productUrl: canonicalUrl,
+            canonicalUrl,
+            urlFingerprint,
+            sourceType: "manual",
+            status: "DISCOVERED",
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoNothing({ target: discoveryCandidates.urlFingerprint })
+          .returning({ id: discoveryCandidates.id });
+        if (inserted) insertedIds.push(inserted.id);
       }
-      return inserted;
+      return insertedIds;
     },
 
     async saveListingRevalidation(id, result) {

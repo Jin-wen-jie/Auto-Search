@@ -34,7 +34,7 @@ export interface WorkerRepository {
     result: ValidatorResponse,
   ) => Promise<void>;
   saveCandidateFailure: (id: string, error: unknown) => Promise<void>;
-  saveDiscoveredPlatformLinks: (links: string[]) => Promise<number>;
+  saveDiscoveredPlatformLinks: (links: string[]) => Promise<string[]>;
   listListingIdsForRevalidation: (limit?: number) => Promise<string[]>;
   getListingForRevalidation: (
     id: string,
@@ -76,17 +76,14 @@ export function createJobHandlers(dependencies: JobHandlerDependencies) {
         // Discover other shops on the same platform
         const discovered = result.extraction.platformLinks ?? [];
         if (discovered.length > 0) {
-          const count = await dependencies.repository.saveDiscoveredPlatformLinks(
+          const ids = await dependencies.repository.saveDiscoveredPlatformLinks(
             discovered,
           );
-          if (count > 0) {
-            // Enqueue the newly discovered candidates for validation
-            const { enqueue, repository } = dependencies;
-            const ids = await repository.listCandidateIdsForValidation(
-              discovered.length,
-            );
+          if (ids.length > 0) {
             await Promise.all(
-              ids.map((id) => enqueue(QUEUES.VALIDATE_CANDIDATE, id)),
+              ids.map((id) =>
+                dependencies.enqueue(QUEUES.VALIDATE_CANDIDATE, id),
+              ),
             );
           }
         }
