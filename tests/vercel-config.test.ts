@@ -28,9 +28,26 @@ function sectionBetween(
 }
 
 function environmentNames(markdown: string): string[] {
-  return Array.from(markdown.matchAll(/`([A-Z][A-Z0-9_]+)`/g), ([, name]) =>
-    name,
+  return Array.from(
+    markdown.matchAll(/^- `([A-Z][A-Z0-9_]+)`\s*$/gm),
+    ([, name]) => name,
   );
+}
+
+const credentialLeakPatterns = [
+  /postgres(?:ql)?:\/\//i,
+  /https?:\/\/[^/\s:@]+:[^@\s/]+@/i,
+  /\$\{\{\s*secrets\./i,
+  /\b[0-9a-f]{32,}\b/i,
+  /`?(?:DATABASE_URL|SESSION_SECRET|ADMIN_INITIAL_USERNAME|ADMIN_INITIAL_PASSWORD|VALIDATOR_SHARED_TOKEN)`?\s*(?:=|:|：)\s*\S+/,
+  /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/,
+  /\bsb_secret_[A-Za-z0-9_-]{8,}\b/i,
+  /(?:^|[^A-Za-z0-9+/])[A-Za-z0-9+/]{48,}={0,2}(?=$|[^A-Za-z0-9+/=])/m,
+  /(?:https?:\/\/)?(?:[a-z0-9-]+\.)+vercel\.app(?:[/?#\s]|$)/i,
+];
+
+function containsCredentialLeak(value: string): boolean {
+  return credentialLeakPatterns.some((pattern) => pattern.test(value));
 }
 
 describe("Vercel monorepo configuration", () => {
@@ -69,11 +86,37 @@ describe("free public deployment documentation", () => {
     expect(deployment).toContain("Next.js");
   });
 
+  it("selects the IPv4 Supabase pooler compatible with prepared statements", () => {
+    const supabaseConnection = sectionBetween(
+      deployment,
+      "### 2. 配置 Supabase Production 连接",
+      "### 3. 导入并配置 Vercel",
+    );
+
+    expect(supabaseConnection).toContain("Supabase Dashboard");
+    expect(supabaseConnection).toContain("Connect");
+    expect(supabaseConnection).toContain("Connection string");
+    expect(supabaseConnection).toContain("Shared/Session Pooler");
+    expect(supabaseConnection).toContain("IPv4");
+    expect(supabaseConnection).toContain("`5432`");
+    expect(supabaseConnection).toContain("`sslmode=require`");
+    expect(supabaseConnection).toContain("postgres-js");
+    expect(supabaseConnection).toContain("默认启用 prepared statements");
+    expect(supabaseConnection).toContain("不要选择 Transaction Pooler");
+    expect(supabaseConnection).toContain("`6543`");
+    expect(supabaseConnection).toContain(
+      "除非未来代码显式关闭 prepared statements",
+    );
+    expect(supabaseConnection).toContain("同一个 Production pooler URL");
+    expect(supabaseConnection).toContain("GitHub Actions Repository Secret");
+    expect(supabaseConnection).toContain("Vercel Production 环境变量");
+  });
+
   it("lists only the required Vercel variables and repository secrets", () => {
     const vercelVariables = sectionBetween(
       deployment,
       "#### Vercel 环境变量",
-      "### 3. 配置 GitHub Actions",
+      "### 4. 配置 GitHub Actions",
     );
     expect(environmentNames(vercelVariables)).toEqual([
       "DATABASE_URL",
@@ -86,6 +129,17 @@ describe("free public deployment documentation", () => {
     expect(vercelVariables).toContain("owner");
     expect(vercelVariables).toContain("随机生成");
     expect(vercelVariables).toContain("绝不写入仓库或日志");
+    expect(vercelVariables).toContain("当前 Production 实际使用");
+    expect(vercelVariables).toContain("`SESSION_SECRET` 是保留配置");
+    expect(vercelVariables).toContain("当前版本不直接消费");
+    expect(vercelVariables).toContain("Preview 默认不连接生产数据库");
+    expect(vercelVariables).toContain("独立 Supabase 项目/数据库");
+    expect(vercelVariables).toContain("独立管理员凭据");
+    expect(vercelVariables).toContain("Vercel Deployment Protection");
+    expect(vercelVariables).toContain("绝不复用 Production Secret");
+    expect(vercelVariables).not.toContain(
+      "以下名称同时应用于 Production 和 Preview",
+    );
 
     const repositorySecrets = sectionBetween(
       deployment,
@@ -117,9 +171,26 @@ describe("free public deployment documentation", () => {
 
   it("states the free-tier limits without recommending obsolete hosts", () => {
     expect(deployment).toContain("Vercel Hobby 不会因空闲休眠");
+    expect(deployment).toContain("仅适合个人、非商业用途");
+    expect(deployment).toContain("商业用途需重新选择合规计划");
     expect(deployment).toContain("免费额度和公平使用限制");
     expect(deployment).toContain("Supabase 和 GitHub Actions");
     expect(deployment).toContain("超限或平台策略");
+    expect(deployment).toContain("公开仓库连续 60 天没有仓库活动");
+    expect(deployment).toContain("GitHub 会自动停用 scheduled workflow");
+    expect(deployment).toContain("Actions 重新启用");
+    expect(deployment).toContain("产生仓库活动");
+    expect(deployment).toContain("监控最近一次成功 run");
+    expect(deployment).toContain(
+      "需在 Actions 重新启用 scheduled workflow；恢复后应继续产生仓库活动",
+    );
+    expect(deployment).not.toContain(
+      "重新启用 scheduled workflow，或产生仓库活动",
+    );
+    expect(deployment).toContain("采集停止后");
+    expect(deployment).toContain("Supabase Free");
+    expect(deployment).toContain("可能在 7 天周期后暂停");
+    expect(deployment).toContain("Supabase Dashboard 恢复");
     expect(deployment).toContain("无需银行卡");
     expect(deployment).toContain("不能承诺绝对 100% SLA");
     expect(deployment).toMatch(
@@ -128,12 +199,33 @@ describe("free public deployment documentation", () => {
   });
 
   it("does not expose credentials or a concrete deployment URL", () => {
-    expect(deployment).not.toMatch(/postgres(?:ql)?:\/\//i);
-    expect(deployment).not.toMatch(/\$\{\{\s*secrets\./i);
-    expect(deployment).not.toMatch(/\b[0-9a-f]{32,}\b/i);
-    expect(deployment).not.toMatch(
-      /(?:DATABASE_URL|SESSION_SECRET|ADMIN_INITIAL_USERNAME|ADMIN_INITIAL_PASSWORD|VALIDATOR_SHARED_TOKEN)\s*=/,
-    );
-    expect(deployment).not.toMatch(/https?:\/\/[^\s)]+\.vercel\.app/i);
+    expect(containsCredentialLeak(deployment)).toBe(false);
+  });
+
+  it("detects credential-shaped values without rejecting ordinary links", () => {
+    const suspicious = [
+      "DATABASE_URL: redacted-value",
+      "SESSION_SECRET=redacted-value",
+      `eyJ${"a".repeat(12)}.${"b".repeat(12)}.${"c".repeat(12)}`,
+      `sb_secret_${"x".repeat(16)}`,
+      "a".repeat(40),
+      "Q".repeat(64),
+      ["postgresql", "://", "user:password@db.invalid/database"].join(""),
+      ["https", "://", "user:password@example.invalid/path"].join(""),
+      ["https", "://", "example-project.vercel.app"].join(""),
+    ];
+    for (const value of suspicious) {
+      expect(containsCredentialLeak(value), value).toBe(true);
+    }
+
+    const ordinary = [
+      ["https", "://", "supabase.com/docs"].join(""),
+      ["https", "://", "vercel.com/docs"].join(""),
+      "Include source files outside of the Root Directory in the Build Step",
+      "DATABASE_URL 必须启用 TLS，连接参数包含 sslmode=require",
+    ];
+    for (const value of ordinary) {
+      expect(containsCredentialLeak(value), value).toBe(false);
+    }
   });
 });

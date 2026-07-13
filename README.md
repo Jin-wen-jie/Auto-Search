@@ -153,7 +153,15 @@ $env:PGPASSWORD = "你的 postgres 密码"
 - Supabase PostgreSQL：同时供 Web 和采集任务读写持久数据。
 - GitHub Actions `Hourly collection`：按小时启动临时 Validator，再运行 one-shot Worker，任务结束后两者随 job 退出。
 
-### 2. 导入并配置 Vercel
+### 2. 配置 Supabase Production 连接
+
+1. 在 Supabase Dashboard 打开 **Connect -> Connection string**。
+2. 选择 **Shared/Session Pooler（IPv4）**，端口使用 `5432`。
+3. 平台中的 `DATABASE_URL` 必须启用 TLS，连接参数应包含 `sslmode=require`。
+4. 当前数据库客户端 postgres-js 默认启用 prepared statements，因此不要选择 Transaction Pooler（`6543`），除非未来代码显式关闭 prepared statements。
+5. GitHub Actions Repository Secret 与 Vercel Production 环境变量中的 `DATABASE_URL` 必须使用同一个 Production pooler URL；真实值只保存在平台的 Secret 配置中。
+
+### 3. 导入并配置 Vercel
 
 1. 在 Vercel 新建项目，从 GitHub 仓库 `Jin-wen-jie/-` 导入。
 2. 将 **Root Directory** 精确设置为 `apps/web`。
@@ -162,16 +170,18 @@ $env:PGPASSWORD = "你的 postgres 密码"
 
 #### Vercel 环境变量
 
-以下名称同时应用于 Production 和 Preview：
+以下 4 个名称默认只配置在 Production，不将生产值应用到 Preview：
 
 - `DATABASE_URL`
 - `SESSION_SECRET`
 - `ADMIN_INITIAL_USERNAME`
 - `ADMIN_INITIAL_PASSWORD`
 
-初始 username 建议使用 `owner`。Session Secret 和初始 password 应分别随机生成，所有真实值绝不写入仓库或日志。
+其中 `DATABASE_URL`、`ADMIN_INITIAL_USERNAME` 和 `ADMIN_INITIAL_PASSWORD` 是当前 Production 实际使用的数据库与管理员 bootstrap 配置。`SESSION_SECRET` 是保留配置，属于既定部署合同，当前版本不直接消费；仍应随机生成并只保存在 Vercel。初始 username 建议使用 `owner`，初始 password 也应随机生成，所有真实值绝不写入仓库或日志。
 
-### 3. 配置 GitHub Actions
+Preview 默认不连接生产数据库，并绝不复用 Production Secret。若确实需要可用 Preview，必须使用独立 Supabase 项目/数据库、独立管理员凭据，并启用 Vercel Deployment Protection。
+
+### 4. 配置 GitHub Actions
 
 #### Repository Secrets
 
@@ -186,19 +196,21 @@ $env:PGPASSWORD = "你的 postgres 密码"
 - collect job 最长 30 分钟；Worker 最长运行 25 分钟，每次最多处理 50 个候选项 + 50 个货源链接，并发数 4。
 - 需要立即采集或验证配置时，使用路径 `Actions -> Hourly collection -> Run workflow` 手动触发。
 
-### 4. 首次部署顺序
+### 5. 首次部署顺序
 
 先配置 GitHub Secrets 并手动运行成功，再导入并部署 Vercel：
 
-1. 创建 Supabase 项目并取得数据库连接信息，只保存到平台的 Secret 配置中。
+1. 创建 Supabase 项目，按第 2 节选择 Production Shared/Session Pooler 并启用 TLS，只把连接信息保存到平台的 Secret 配置中。
 2. 添加 GitHub Repository Secrets，通过 `Actions -> Hourly collection -> Run workflow` 手动运行，确认迁移、初始化和采集成功。
-3. 按上述设置导入 Vercel 项目，添加 Production 和 Preview 环境变量后部署。
+3. 按上述设置导入 Vercel 项目，添加 Production 环境变量后部署；Preview 默认保持与生产数据库隔离。
 4. 首次登录后立即修改初始密码。
 
-### 5. 免费方案限制
+### 6. 免费方案限制
 
-- Vercel Hobby 不会因空闲休眠，但受免费额度和公平使用限制约束。
+- Vercel Hobby 不会因空闲休眠，但仅适合个人、非商业用途，并受免费额度和公平使用限制约束；商业用途需重新选择合规计划。
 - Supabase 和 GitHub Actions 有各自的免费额度；超限或平台策略调整都可能影响可用性。
+- 公开仓库连续 60 天没有仓库活动时，GitHub 会自动停用 scheduled workflow；需在 Actions 重新启用 scheduled workflow；恢复后应继续产生仓库活动，并监控最近一次成功 run。
+- 采集停止后，Supabase Free 低活动项目可能在 7 天周期后暂停；需在 Supabase Dashboard 恢复，并检查数据库连接与最近的采集结果。
 - 该起步方案无需银行卡，但不能承诺绝对 100% SLA；生产使用前应重新核对各平台的最新条款和配额。
 
 ## 可选服务器部署
