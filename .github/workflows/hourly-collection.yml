@@ -1,0 +1,92 @@
+name: Hourly collection
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hourly-collection
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      VALIDATOR_SHARED_TOKEN: ${{ secrets.VALIDATOR_SHARED_TOKEN }}
+      VALIDATOR_BASE_URL: http://127.0.0.1:3001
+      CANDIDATE_LIMIT: "50"
+      LISTING_LIMIT: "50"
+      WORKER_CONCURRENCY: "4"
+      WORKER_DEADLINE_MS: "1500000"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build worker and validator
+        run: |
+          pnpm --filter @compare/worker... build
+          pnpm --filter @compare/validator build
+
+      - name: Migrate database
+        run: pnpm db:migrate
+
+      - name: Seed database
+        run: pnpm db:seed
+
+      - name: Run bounded collection
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          validator_pid=""
+
+          cleanup() {
+            if [[ -n "${validator_pid}" ]]; then
+              kill "${validator_pid}" 2>/dev/null || true
+              wait "${validator_pid}" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+
+          pnpm --filter @compare/validator start \
+            >"${RUNNER_TEMP}/validator.log" 2>&1 &
+          validator_pid=$!
+
+          deadline=$((SECONDS + 30))
+          while (( SECONDS < deadline )); do
+            if ! kill -0 "${validator_pid}" 2>/dev/null; then
+              echo "Validator exited before becoming healthy." >&2
+              exit 1
+            fi
+
+            if curl --fail --silent --show-error --max-time 1 \
+              http://127.0.0.1:3001/health >/dev/null; then
+              pnpm --filter @compare/worker run-once
+              exit 0
+            fi
+
+            if (( SECONDS < deadline )); then
+              sleep 1
+            fi
+          done
+
+          echo "Validator health check timed out after 30 seconds." >&2
+          exit 1
