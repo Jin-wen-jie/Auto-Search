@@ -6,6 +6,8 @@ import * as cheerio from "cheerio";
  */
 const KNOWN_PLATFORMS: string[] = [
   "ldxp.cn",
+  "codesky.qzz.io",
+  "gptmf.com",
 ];
 
 export interface ExtractedProduct {
@@ -25,6 +27,8 @@ export interface ExtractedProduct {
     availability: number;
   };
 }
+
+type ExtractedProductDetails = Omit<ExtractedProduct, "platformLinks">;
 
 /**
  * Extract product information from HTML.
@@ -55,7 +59,7 @@ export function extractProduct(
   return { ...tryDom($, pageUrl), platformLinks };
 }
 
-function tryJsonLd($: cheerio.CheerioAPI): ExtractedProduct | null {
+function tryJsonLd($: cheerio.CheerioAPI): ExtractedProductDetails | null {
   const scripts = $('script[type="application/ld+json"]');
   for (const el of scripts) {
     try {
@@ -93,7 +97,7 @@ function tryJsonLd($: cheerio.CheerioAPI): ExtractedProduct | null {
   return null;
 }
 
-function tryOpenGraph($: cheerio.CheerioAPI): ExtractedProduct {
+function tryOpenGraph($: cheerio.CheerioAPI): ExtractedProductDetails {
   const title =
     $('meta[property="og:title"]').attr("content") ?? null;
   const price =
@@ -108,7 +112,7 @@ function tryOpenGraph($: cheerio.CheerioAPI): ExtractedProduct {
 function tryDom(
   $: cheerio.CheerioAPI,
   _pageUrl: string,
-): ExtractedProduct {
+): ExtractedProductDetails {
   const title = $("h1").first().text().trim() || $("title").text().trim() ||
     null;
 
@@ -147,7 +151,7 @@ function buildResult(
   availability: ExtractedProduct["availability"],
   baseConfidence: number,
   buyAction?: boolean,
-): ExtractedProduct {
+): ExtractedProductDetails {
   const buyActionResolved =
     buyAction ??
     ($('a[href*="cart"], a[href*="checkout"], button').length > 0);
@@ -194,7 +198,11 @@ function buildResult(
 
 /**
  * 从页面中提取同平台其它店铺的链接。
- * 只提取已知发卡平台域名下的 /shop/ 路径链接，自动去重。
+ * 只提取已知发卡平台域名下的相关路径链接（自动去重）。
+ * 不同平台的店铺页路径模式：
+ *   - ldxp.cn → /shop/{shopName}
+ *   - codesky.qzz.io → /item/{id}
+ *   - gptmf.com → /buy/{id}
  */
 function extractPlatformLinks(
   $: cheerio.CheerioAPI,
@@ -211,10 +219,18 @@ function extractPlatformLinks(
       const resolved = new URL(href, pageUrl);
 
       // 只关注已知平台域名
-      if (!KNOWN_PLATFORMS.some((p) => resolved.hostname.endsWith(p))) return;
+      if (!KNOWN_PLATFORMS.some((platform) =>
+        resolved.hostname === platform ||
+        resolved.hostname.endsWith(`.${platform}`)
+      )) return;
 
-      // 只关注 /shop/ 路径（发卡平台的店铺页）
-      if (!resolved.pathname.startsWith("/shop/")) return;
+      // 关注店铺或商品页路径（不同平台模式不同）
+      const isShopPage =
+        resolved.pathname.startsWith("/shop/") ||
+        resolved.pathname.startsWith("/item/") ||
+        resolved.pathname.startsWith("/buy/");
+
+      if (!isShopPage) return;
 
       // 去掉 fragment 后的规范化 URL
       resolved.hash = "";

@@ -123,4 +123,23 @@ describe("validator", () => {
       availability: "IN_STOCK",
     });
   });
+
+  it("discovers new platform paths without trusting lookalike domains", () => {
+    const html = `
+      <a href="https://store.codesky.qzz.io/item/8">Codesky item</a>
+      <a href="https://store.codesky.qzz.io/item/8#details">Duplicate item</a>
+      <a href="https://shop.gptmf.com/buy/26">GPTMF product</a>
+      <a href="https://evilgptmf.com/buy/99">Lookalike GPTMF domain</a>
+      <a href="https://notldxp.cn/shop/fake">Lookalike LDXP domain</a>
+    `;
+
+    expect(
+      extractProduct(html, "https://catalog.example/products"),
+    ).toMatchObject({
+      platformLinks: [
+        "https://store.codesky.qzz.io/item/8",
+        "https://shop.gptmf.com/buy/26",
+      ],
+    });
+  });
 });

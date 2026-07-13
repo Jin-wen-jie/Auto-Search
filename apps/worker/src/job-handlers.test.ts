@@ -21,6 +21,7 @@ const validationResult = {
     stockQuantity: 5,
     buyAction: true,
     pageFingerprint: "page-hash",
+    platformLinks: [],
     confidence: { title: 1, price: 1, availability: 1 },
   },
 } satisfies ValidatorResponse;
@@ -35,6 +36,7 @@ function createRepository(): WorkerRepository {
     markCandidateValidating: vi.fn().mockResolvedValue(undefined),
     saveCandidateValidation: vi.fn().mockResolvedValue(undefined),
     saveCandidateFailure: vi.fn().mockResolvedValue(undefined),
+    saveDiscoveredPlatformLinks: vi.fn().mockResolvedValue(0),
     listListingIdsForRevalidation: vi.fn().mockResolvedValue([]),
     getListingForRevalidation: vi.fn().mockResolvedValue(null),
     saveListingRevalidation: vi.fn().mockResolvedValue(undefined),
