@@ -39,12 +39,15 @@ describe("database client", () => {
     expect(database).toEqual({ kind: "db" });
   });
 
-  it("allows serverless callers to limit the pool to one connection", () => {
-    createDb("postgres://session-pooler/compare", { maxConnections: 1 });
+  it("allows serverless callers to limit and retire idle connections", () => {
+    createDb("postgres://session-pooler/compare", {
+      maxConnections: 1,
+      idleTimeoutSeconds: 20,
+    });
 
     expect(postgres).toHaveBeenCalledWith(
       "postgres://session-pooler/compare",
-      expect.objectContaining({ max: 1 }),
+      expect.objectContaining({ max: 1, idle_timeout: 20 }),
     );
   });
 });

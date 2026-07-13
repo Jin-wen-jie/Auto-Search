@@ -4,11 +4,15 @@ import * as schema from "./schema.js";
 
 type CreateDbOptions = {
   maxConnections?: number;
+  idleTimeoutSeconds?: number;
 };
 
 export function createDb(databaseUrl: string, options: CreateDbOptions = {}) {
   const client = postgres(databaseUrl, {
     max: options.maxConnections ?? 10,
+    ...(options.idleTimeoutSeconds === undefined
+      ? {}
+      : { idle_timeout: options.idleTimeoutSeconds }),
     connect_timeout: 10,
     prepare: true,
     connection: {
