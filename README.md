@@ -143,6 +143,64 @@ $env:PGPASSWORD = "你的 postgres 密码"
 & "C:\Program Files\PostgreSQL\17\bin\pg_restore.exe" -h localhost -U postgres -d compare_restore backup.dump
 ```
 
+## 免费公网部署
+
+推荐使用 Vercel Hobby 托管持续可访问的 Web，Supabase 托管数据库，GitHub Actions 每小时启动一次有界采集任务。Render 和 Northflank 不再作为推荐的最终方案；下方 Docker Compose 仍保留为可选服务器部署方式。
+
+### 1. 架构
+
+- GitHub `main` -> Vercel Hobby Web：`main` 分支更新后构建并部署 Next.js 管理后台。
+- Supabase PostgreSQL：同时供 Web 和采集任务读写持久数据。
+- GitHub Actions `Hourly collection`：按小时启动临时 Validator，再运行 one-shot Worker，任务结束后两者随 job 退出。
+
+### 2. 导入并配置 Vercel
+
+1. 在 Vercel 新建项目，从 GitHub 仓库 `Jin-wen-jie/-` 导入。
+2. 将 **Root Directory** 精确设置为 `apps/web`。
+3. 启用 **Include source files outside of the Root Directory in the Build Step（构建时包含根目录之外的源文件）**，以便安装和构建工作区依赖。
+4. 将 **Framework** 设置为 **Next.js**，然后按下方范围配置环境变量。
+
+#### Vercel 环境变量
+
+以下名称同时应用于 Production 和 Preview：
+
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `ADMIN_INITIAL_USERNAME`
+- `ADMIN_INITIAL_PASSWORD`
+
+初始 username 建议使用 `owner`。Session Secret 和初始 password 应分别随机生成，所有真实值绝不写入仓库或日志。
+
+### 3. 配置 GitHub Actions
+
+#### Repository Secrets
+
+在 GitHub 仓库的 Settings -> Secrets and variables -> Actions 中只新增以下 Repository Secrets 名称：
+
+- `DATABASE_URL`
+- `VALIDATOR_SHARED_TOKEN`
+
+#### 采集计划与手动触发
+
+- workflow cron 为 `0 * * * *`。GitHub 计划任务可能延迟，不保证整点启动。
+- collect job 最长 30 分钟；Worker 最长运行 25 分钟，每次最多处理 50 个候选项 + 50 个货源链接，并发数 4。
+- 需要立即采集或验证配置时，使用路径 `Actions -> Hourly collection -> Run workflow` 手动触发。
+
+### 4. 首次部署顺序
+
+先配置 GitHub Secrets 并手动运行成功，再导入并部署 Vercel：
+
+1. 创建 Supabase 项目并取得数据库连接信息，只保存到平台的 Secret 配置中。
+2. 添加 GitHub Repository Secrets，通过 `Actions -> Hourly collection -> Run workflow` 手动运行，确认迁移、初始化和采集成功。
+3. 按上述设置导入 Vercel 项目，添加 Production 和 Preview 环境变量后部署。
+4. 首次登录后立即修改初始密码。
+
+### 5. 免费方案限制
+
+- Vercel Hobby 不会因空闲休眠，但受免费额度和公平使用限制约束。
+- Supabase 和 GitHub Actions 有各自的免费额度；超限或平台策略调整都可能影响可用性。
+- 该起步方案无需银行卡，但不能承诺绝对 100% SLA；生产使用前应重新核对各平台的最新条款和配额。
+
 ## 可选服务器部署
 
 下面的 Docker Compose 文件用于 Linux 服务器完整栈部署，不是本地开发依赖，也不需要安装 Docker Desktop。
