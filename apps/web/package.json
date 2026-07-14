@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @compare/domain build && pnpm --filter @compare/db build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0 --ignore-pattern .next --ignore-pattern node_modules",
     "test": "vitest run",

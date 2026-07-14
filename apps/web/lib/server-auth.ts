@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { hashToken } from "./auth";
 import { getAdminAuthRepository } from "./auth-repository";
 import { authorizeAdminSession } from "./auth-service";
@@ -15,14 +16,14 @@ export function csrfCookieOptions(expiresAt: Date) {
   return { httpOnly: false, secure: process.env.NODE_ENV === "production", sameSite: "strict" as const, path: "/", expires: expiresAt };
 }
 
-export async function getCurrentAdminSession() {
+export const getCurrentAdminSession = cache(async function getCurrentAdminSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const repository = await getAdminAuthRepository();
   const session = await authorizeAdminSession(repository, token);
   return session ? { ...session, tokenHash: hashToken(token) } : null;
-}
+});
 
 export async function authorizeAdminRequest(options?: {
   allowPasswordChangeRequired?: boolean;

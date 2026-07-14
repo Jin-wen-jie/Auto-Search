@@ -8,7 +8,7 @@
   "exports": {
     ".": {
       "types": "./src/client.ts",
-      "development": "./src/client.ts",
+      "source": "./src/client.ts",
       "import": "./dist/client.js",
       "default": "./dist/client.js"
     }
@@ -20,7 +20,7 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "tsx --conditions=development src/seed-run.ts"
+    "db:seed": "tsx --conditions=source src/seed-run.ts"
   },
   "dependencies": {
     "@compare/domain": "workspace:*",

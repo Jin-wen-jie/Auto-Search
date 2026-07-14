@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   auditEvents,
   discoveryCandidates,
@@ -15,8 +15,27 @@ import {
 } from "./candidate-service";
 import { getDatabase } from "./database";
 
-export async function listCandidates(): Promise<CandidateView[]> {
+export interface CandidatePage {
+  items: CandidateView[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export async function listCandidates(options: {
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<CandidatePage> {
   const db = getDatabase();
+  const requestedPage = options.page ?? 1;
+  const requestedPageSize = options.pageSize ?? 50;
+  const page = Number.isFinite(requestedPage)
+    ? Math.max(1, Math.floor(requestedPage))
+    : 1;
+  const pageSize = Number.isFinite(requestedPageSize)
+    ? Math.min(100, Math.max(1, Math.floor(requestedPageSize)))
+    : 50;
+  const focus = sql<string | null>`${discoveryCandidates.extractionResult} ->> 'focus'`;
   const rows = await db
     .select({
       id: discoveryCandidates.id,
@@ -28,29 +47,31 @@ export async function listCandidates(): Promise<CandidateView[]> {
       comparisonKey: discoveryCandidates.comparisonKey,
       specId: discoveryCandidates.specId,
       createdAt: discoveryCandidates.createdAt,
+      total: sql<number>`count(*) over()::int`,
     })
     .from(discoveryCandidates)
     .leftJoin(
       discoveryEvents,
       eq(discoveryCandidates.discoveryEventId, discoveryEvents.id),
     )
-    .orderBy(desc(discoveryCandidates.createdAt));
+    .where(sql`(${focus} is null or ${focus} in ('K12', 'Bug Team'))`)
+    .orderBy(
+      sql`case when ${focus} in ('K12', 'Bug Team') then 0 else 1 end`,
+      desc(discoveryCandidates.createdAt),
+    )
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
 
-  return rows
-    .map(toCandidateView)
-    .filter((c) => isK12OrBugTeam(c.focus))
-    .sort((left, right) => focusPriority(left.focus) - focusPriority(right.focus));
-}
+  if (rows.length === 0 && page > 1) {
+    return listCandidates({ page: 1, pageSize });
+  }
 
-/** Only K12/Bug Team candidates enter the investigation queue. */
-function isK12OrBugTeam(focus: string | null): boolean {
-  // Candidates that haven't been classified yet are allowed through
-  if (focus === null) return true;
-  return focus === "K12" || focus === "Bug Team";
-}
-
-function focusPriority(focus: string | null): number {
-  return focus === "K12" || focus === "Bug Team" ? 0 : 1;
+  return {
+    items: rows.map(toCandidateView),
+    page,
+    pageSize,
+    total: Number(rows[0]?.total ?? 0),
+  };
 }
 
 export async function createManualCandidate(productUrl: string): Promise<{

@@ -1,4 +1,4 @@
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import {
   discoveryCandidates,
   discoveryEvents,
@@ -10,9 +10,13 @@ import {
 import { toRankingView, type RankingView } from "./admin-read-model";
 import { getDatabase } from "./database";
 
-export async function listRankingViews(): Promise<RankingView[]> {
+export async function listRankingViews(limit = 200): Promise<RankingView[]> {
   const db = getDatabase();
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1_000);
+  const boundedLimit = Number.isFinite(limit)
+    ? Math.min(500, Math.max(1, Math.floor(limit)))
+    : 200;
+  const unitPrice = sql`${listings.convertedPriceCny} / greatest(${listings.bundleQty} * ${listings.minBundleCount}, 1)`;
   const rows = await db
     .select({
       id: listings.id,
@@ -49,50 +53,54 @@ export async function listRankingViews(): Promise<RankingView[]> {
         eq(listings.status, "ACTIVE"),
         gte(listings.lastVerifiedAt, cutoff),
       ),
-    );
+    )
+    .orderBy(sql`${unitPrice} asc nulls last`)
+    .limit(boundedLimit);
 
   return rows
     .filter(
       (row): row is typeof row & { lastVerifiedAt: Date } =>
         row.lastVerifiedAt !== null,
     )
-    .map(toRankingView)
-    .sort((left, right) => moneyValue(left.unitCny) - moneyValue(right.unitCny));
+    .map(toRankingView);
 }
 
 export async function getDashboardCounts() {
   const db = getDatabase();
-  const [candidates, merchantCount, listingCount] = await Promise.all([
-    db.$count(discoveryCandidates),
-    db.$count(merchants),
-    db.$count(listings),
-  ]);
+  const [counts] = await db
+    .select({
+      candidates: sql<number>`(select count(*)::int from ${discoveryCandidates})`,
+      merchants: sql<number>`(select count(*)::int from ${merchants})`,
+      listings: sql<number>`(select count(*)::int from ${listings})`,
+    })
+    .from(sql`(select 1) as singleton`);
   return {
-    candidates,
-    merchants: merchantCount,
-    listings: listingCount,
+    candidates: Number(counts?.candidates ?? 0),
+    merchants: Number(counts?.merchants ?? 0),
+    listings: Number(counts?.listings ?? 0),
   };
 }
 
 export async function listMerchantViews() {
   const db = getDatabase();
-  const [merchantRows, listingRows] = await Promise.all([
-    db.select().from(merchants),
-    db
-      .select({ merchantId: listings.merchantId, status: listings.status })
-      .from(listings),
-  ]);
-  return merchantRows.map((merchant) => ({
-    id: merchant.id,
-    name: merchant.name,
-    homepageUrl: merchant.homepageUrl,
+  const rows = await db
+    .select({
+      id: merchants.id,
+      name: merchants.name,
+      homepageUrl: merchants.homepageUrl,
+      platform: merchants.platform,
+      activeListings: sql<number>`count(${listings.id}) filter (where ${listings.status} = ${"ACTIVE"})::int`,
+      lastVerifiedAt: merchants.lastVerifiedAt,
+      status: merchants.status,
+    })
+    .from(merchants)
+    .leftJoin(listings, eq(listings.merchantId, merchants.id))
+    .groupBy(merchants.id);
+  return rows.map((merchant) => ({
+    ...merchant,
     platform: merchant.platform ?? "—",
-    activeListings: listingRows.filter(
-      (listing) =>
-        listing.merchantId === merchant.id && listing.status === "ACTIVE",
-    ).length,
+    activeListings: Number(merchant.activeListings),
     lastVerifiedAt: merchant.lastVerifiedAt?.toISOString() ?? null,
-    status: merchant.status,
   }));
 }
 
@@ -130,11 +138,6 @@ export async function listSourceViews() {
       errorCategory: stringValue(result.errorCategory),
     };
   });
-}
-
-function moneyValue(value: string): number {
-  const parsed = Number(value.replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

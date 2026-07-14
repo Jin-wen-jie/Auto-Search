@@ -57,18 +57,18 @@ describe("admin read model", () => {
   });
 
   it("counts dashboard records in PostgreSQL without loading every row", async () => {
-    const count = vi
-      .fn()
-      .mockResolvedValueOnce(80)
-      .mockResolvedValueOnce(12)
-      .mockResolvedValueOnce(34);
-    mocks.getDatabase.mockReturnValue({ $count: count });
+    const from = vi.fn().mockResolvedValue([
+      { candidates: 80, merchants: 12, listings: 34 },
+    ]);
+    const select = vi.fn().mockReturnValue({ from });
+    mocks.getDatabase.mockReturnValue({ select });
 
     await expect(getDashboardCounts()).resolves.toEqual({
       candidates: 80,
       merchants: 12,
       listings: 34,
     });
-    expect(count).toHaveBeenCalledTimes(3);
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(from).toHaveBeenCalledTimes(1);
   });
 });

@@ -47,4 +47,13 @@ describe("web database configuration", () => {
       { maxConnections: 1 },
     );
   });
+
+  it("allows bounded concurrency for the local development database", async () => {
+    await getDatabaseForUrl("postgres://postgres:pass@localhost:5432/compare");
+
+    expect(mocks.createDb).toHaveBeenCalledWith(
+      "postgres://postgres:pass@localhost:5432/compare",
+      { maxConnections: 4, idleTimeoutSeconds: 20 },
+    );
+  });
 });

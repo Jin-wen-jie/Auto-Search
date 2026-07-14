@@ -19,7 +19,7 @@ const createSchema = z.object({
     }),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   const authorization = await authorizeAdminRequest();
   if (!authorization.ok) {
     return NextResponse.json(
@@ -27,7 +27,13 @@ export async function GET() {
       { status: authorization.status },
     );
   }
-  return NextResponse.json(await listCandidates());
+  const searchParams = new URL(request.url).searchParams;
+  return NextResponse.json(
+    await listCandidates({
+      page: Number(searchParams.get("page") ?? 1),
+      pageSize: Number(searchParams.get("pageSize") ?? 50),
+    }),
+  );
 }
 
 export async function POST(request: Request) {

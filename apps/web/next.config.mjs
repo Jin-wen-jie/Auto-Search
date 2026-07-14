@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const config = {
-  output: "standalone",
+  ...(process.env.NEXT_OUTPUT === "standalone"
+    ? { output: "standalone" }
+    : {}),
 };
 
 export default config;

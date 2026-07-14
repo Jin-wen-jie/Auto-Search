@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0",
     "test": "vitest run",
-    "dev": "tsx watch --conditions=development src/index.ts",
+    "dev": "tsx watch --conditions=source src/index.ts",
     "build": "tsc",
     "run-once": "node dist/run-once.js",
     "start": "node dist/index.js"

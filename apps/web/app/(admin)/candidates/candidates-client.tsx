@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react";
 import { DataTable } from "../../../components/data-table";
 import { ExternalLink } from "../../../components/external-link";
 import { StatusBadge } from "../../../components/status-badge";
@@ -16,6 +17,13 @@ interface Candidate {
   canApprove: boolean; createdAt: string;
 }
 
+interface CandidatePage {
+  items: Candidate[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 function readCsrfToken(): string {
   for (const name of ["__Host-admin_csrf", "admin_csrf"]) {
     const prefix = `${name}=`;
@@ -28,26 +36,36 @@ function readCsrfToken(): string {
 }
 
 export default function CandidatesClient({
-  initialCandidates,
+  initialPage,
 }: {
-  initialCandidates: Candidate[];
+  initialPage: CandidatePage;
 }) {
-  const [candidates, setCandidates] = useState(initialCandidates);
+  const [candidates, setCandidates] = useState(initialPage.items);
+  const [page, setPage] = useState(initialPage.page);
+  const [total, setTotal] = useState(initialPage.total);
+  const pageSize = initialPage.pageSize;
   const [loading, setLoading] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [adding, setAdding] = useState(false);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [normalizingCandidate, setNormalizingCandidate] = useState<Candidate | null>(null);
 
-  async function fetchCandidates() {
+  async function fetchCandidates(nextPage = page) {
     setLoading(true);
     try {
-      const res = await fetch("/api/candidates");
-      const data = (await res.json()) as Candidate[] | { error?: string };
-      if (!res.ok || !Array.isArray(data)) {
-        throw new Error(Array.isArray(data) ? "加载失败" : data.error ?? "加载失败");
+      const res = await fetch(
+        `/api/candidates?page=${nextPage}&pageSize=${pageSize}`,
+      );
+      const data = (await res.json()) as Partial<CandidatePage> & {
+        error?: string;
+      };
+      if (!res.ok || !Array.isArray(data.items)) {
+        throw new Error(data.error ?? "加载失败");
       }
-      setCandidates(data);
+      setCandidates(data.items);
+      setPage(data.page ?? nextPage);
+      setTotal(data.total ?? 0);
       setError("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "加载失败");
@@ -71,28 +89,63 @@ export default function CandidatesClient({
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "添加失败");
       setNewUrl("");
-      await fetchCandidates();
+      await fetchCandidates(1);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "添加失败");
     } finally { setAdding(false); }
   }
 
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
   async function handleReview(id: string, action: "approve" | "reject") {
+    if (reviewingId) return;
+    const previousStatus = candidates.find((candidate) => candidate.id === id)?.status;
+    if (!previousStatus) return;
+    const optimisticStatus = action === "approve" ? "APPROVED" : "REJECTED";
+
     setError("");
-    const response = await fetch(`/api/candidates/${id}/review`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-csrf-token": readCsrfToken(),
-      },
-      body: JSON.stringify({ action }),
-    });
-    const result = (await response.json()) as { error?: string };
-    if (!response.ok) {
-      setError(result.error ?? "审核失败");
-      return;
+    setReviewingId(id);
+    setCandidates((current) =>
+      current.map((candidate) =>
+        candidate.id === id
+          ? { ...candidate, status: optimisticStatus }
+          : candidate,
+      ),
+    );
+
+    try {
+      const response = await fetch(`/api/candidates/${id}/review`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": readCsrfToken(),
+        },
+        body: JSON.stringify({ action }),
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        status?: string;
+      };
+      if (!response.ok) throw new Error(result.error ?? "审核失败");
+      setCandidates((current) =>
+        current.map((candidate) =>
+          candidate.id === id
+            ? { ...candidate, status: result.status ?? optimisticStatus }
+            : candidate,
+        ),
+      );
+    } catch (cause) {
+      setCandidates((current) =>
+        current.map((candidate) =>
+          candidate.id === id
+            ? { ...candidate, status: previousStatus }
+            : candidate,
+        ),
+      );
+      setError(cause instanceof Error ? cause.message : "审核失败");
+    } finally {
+      setReviewingId(null);
     }
-    await fetchCandidates();
   }
 
   const cols: Column<Candidate>[] = [
@@ -105,7 +158,7 @@ export default function CandidatesClient({
     { key: "product", header: "商品页", render: (r) => <ExternalLink href={r.productUrl}>商品页</ExternalLink> },
     { key: "source", header: "发现帖", render: (r) => r.sourceUrl ? <ExternalLink href={r.sourceUrl}>来源帖</ExternalLink> : <span className="text-gray-400">手工录入</span> },
     { key: "merchantLink", header: "店铺", render: (r) => r.merchantUrl ? <ExternalLink href={r.merchantUrl}>店铺</ExternalLink> : <span className="text-gray-400">—</span> },
-    { key: "actions", header: "操作", render: (r) => (r.status === "REVIEW_REQUIRED" || r.status === "DISCOVERED") ? <div className="flex gap-1.5">{!r.canApprove && <button onClick={() => setNormalizingCandidate(r)} className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700">规格归一化</button>}<button onClick={() => handleReview(r.id, "approve")} disabled={!r.canApprove} title={r.canApprove ? "通过审核" : "需先完成规格归一化"} className="rounded bg-green-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-300">通过</button><button onClick={() => handleReview(r.id, "reject")} className="rounded bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700">驳回</button></div> : null },
+    { key: "actions", header: "操作", render: (r) => reviewingId === r.id ? <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600"><LoaderCircle className="h-4 w-4 animate-spin" />保存中</span> : (r.status === "REVIEW_REQUIRED" || r.status === "DISCOVERED") ? <div className="flex gap-1.5">{!r.canApprove && <button onClick={() => setNormalizingCandidate(r)} disabled={reviewingId !== null} className="rounded bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40">规格归一化</button>}<button onClick={() => handleReview(r.id, "approve")} disabled={!r.canApprove || reviewingId !== null} title={r.canApprove ? "通过审核" : "需先完成规格归一化"} className="rounded bg-green-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-300">通过</button><button onClick={() => handleReview(r.id, "reject")} disabled={reviewingId !== null} className="rounded bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40">驳回</button></div> : null },
   ];
 
   return (
@@ -118,7 +171,34 @@ export default function CandidatesClient({
         </form>
       </div>
       {error && <div className="mb-4 border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">{error}</div>}
-      {loading ? <p className="text-gray-600">加载中…</p> : <DataTable columns={cols} rows={candidates} getRowKey={(r) => r.id} />}
+      <div className={loading ? "pointer-events-none opacity-60" : undefined}>
+        <DataTable columns={cols} rows={candidates} getRowKey={(r) => r.id} />
+      </div>
+      <div className="mt-3 flex min-h-9 items-center justify-between gap-3 text-xs text-gray-600">
+        <span>第 {page} / {totalPages} 页，共 {total} 条</span>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            aria-label="上一页"
+            title="上一页"
+            disabled={loading || page <= 1}
+            onClick={() => fetchCandidates(page - 1)}
+            className="grid h-8 w-8 place-items-center rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="下一页"
+            title="下一页"
+            disabled={loading || page >= totalPages}
+            onClick={() => fetchCandidates(page + 1)}
+            className="grid h-8 w-8 place-items-center rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
       {normalizingCandidate && (
         <SpecNormalizer
           candidate={normalizingCandidate}

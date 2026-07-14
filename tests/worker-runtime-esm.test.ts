@@ -17,7 +17,7 @@ function commandOutput(result: SpawnSyncReturns<string>): string {
 }
 
 describe("worker production ESM", () => {
-  it("resolves workspace packages from source in tsx development scripts", () => {
+  it("resolves workspace packages from source in tsx source scripts", () => {
     const workerManifest = JSON.parse(
       readFileSync(new URL("../apps/worker/package.json", import.meta.url), "utf8"),
     ) as { scripts?: { dev?: string } };
@@ -25,10 +25,10 @@ describe("worker production ESM", () => {
       readFileSync(new URL("../packages/db/package.json", import.meta.url), "utf8"),
     ) as { scripts?: { "db:seed"?: string } };
     const expectedWorkerDev =
-      "tsx watch --conditions=development src/index.ts";
+      "tsx watch --conditions=source src/index.ts";
     const expectedDbSeed =
-      "tsx --conditions=development src/seed-run.ts";
-    const scriptsEnableDevelopment =
+      "tsx --conditions=source src/seed-run.ts";
+    const scriptsEnableSource =
       workerManifest.scripts?.dev === expectedWorkerDev &&
       dbManifest.scripts?.["db:seed"] === expectedDbSeed;
 
@@ -37,7 +37,7 @@ describe("worker production ESM", () => {
       [
         "--import",
         "tsx",
-        ...(scriptsEnableDevelopment ? ["--conditions=development"] : []),
+        ...(scriptsEnableSource ? ["--conditions=source"] : []),
         "--input-type=module",
         "--eval",
         "console.log(JSON.stringify({ db: import.meta.resolve('@compare/db'), domain: import.meta.resolve('@compare/domain') }))",

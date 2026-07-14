@@ -43,7 +43,7 @@ describe("workspace", () => {
 
   it("keeps service development scripts scoped to their own environment", () => {
     const expectedDevScripts = new Map([
-      ["apps/worker/package.json", "tsx watch --conditions=development src/index.ts"],
+      ["apps/worker/package.json", "tsx watch --conditions=source src/index.ts"],
       ["apps/validator/package.json", "tsx watch src/server.ts"],
     ]);
 
@@ -55,5 +55,25 @@ describe("workspace", () => {
       expect(manifest.scripts?.dev).toBe(expectedDevScript);
       expect(manifest.scripts?.dev).not.toContain("--env-file=../../.env");
     }
+  });
+
+  it("builds shared packages before starting Next.js development", () => {
+    const manifest = JSON.parse(
+      readFileSync("apps/web/package.json", "utf8"),
+    ) as { scripts?: { predev?: string } };
+
+    expect(manifest.scripts?.predev).toBe(
+      "pnpm --filter @compare/domain build && pnpm --filter @compare/db build",
+    );
+  });
+
+  it("limits standalone Next.js output to Docker builds", () => {
+    const nextConfig = readFileSync("apps/web/next.config.mjs", "utf8");
+    const dockerfile = readFileSync("Dockerfile.web", "utf8");
+
+    expect(nextConfig).toContain('process.env.NEXT_OUTPUT === "standalone"');
+    expect(dockerfile).toContain(
+      "RUN NEXT_OUTPUT=standalone pnpm --filter @compare/web... build",
+    );
   });
 });

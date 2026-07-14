@@ -9,6 +9,8 @@ import {
 import type { AdminAuthRepository } from "./auth-service";
 import { getDatabase } from "./database";
 
+let bootstrapPromise: Promise<void> | undefined;
+
 async function ensureBootstrapAccount(db: Db): Promise<void> {
   await bootstrapAdmin(
     {
@@ -29,7 +31,11 @@ async function ensureBootstrapAccount(db: Db): Promise<void> {
 
 export async function getAdminAuthRepository(): Promise<AdminAuthRepository> {
   const db = getDatabase();
-  await ensureBootstrapAccount(db);
+  bootstrapPromise ??= ensureBootstrapAccount(db).catch((cause) => {
+    bootstrapPromise = undefined;
+    throw cause;
+  });
+  await bootstrapPromise;
 
   return {
     async findAccount() {
@@ -47,27 +53,25 @@ export async function getAdminAuthRepository(): Promise<AdminAuthRepository> {
     },
     async findSession(tokenHash) {
       const [session] = await db
-        .select()
+        .select({
+          expiresAt: adminSessions.expiresAt,
+          revokedAt: adminSessions.revokedAt,
+          csrfTokenHash: adminSessions.csrfTokenHash,
+          sessionVersion: adminSessions.sessionVersion,
+          forcePasswordChange: adminAccounts.forcePasswordChange,
+        })
         .from(adminSessions)
+        .innerJoin(adminAccounts, eq(adminAccounts.id, 1))
         .where(
           and(
             eq(adminSessions.tokenHash, tokenHash),
             isNull(adminSessions.revokedAt),
             gt(adminSessions.expiresAt, new Date()),
+            eq(adminSessions.sessionVersion, adminAccounts.sessionVersion),
           ),
         )
         .limit(1);
-      if (!session) return null;
-      const [account] = await db
-        .select({
-          forcePasswordChange: adminAccounts.forcePasswordChange,
-          sessionVersion: adminAccounts.sessionVersion,
-        })
-        .from(adminAccounts)
-        .where(eq(adminAccounts.id, 1))
-        .limit(1);
-      if (!account || account.sessionVersion !== session.sessionVersion) return null;
-      return { ...session, forcePasswordChange: account.forcePasswordChange };
+      return session ?? null;
     },
     async replacePasswordAndRevokeSessions({ passwordHash, changedAt }) {
       await db.transaction(async (tx) => {
