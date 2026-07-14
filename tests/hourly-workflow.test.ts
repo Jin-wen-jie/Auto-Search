@@ -13,6 +13,10 @@ interface WorkflowStep {
 interface HourlyWorkflow {
   name: string;
   on: {
+    push: {
+      branches: string[];
+      paths: string[];
+    };
     schedule: Array<{ cron: string }>;
     workflow_dispatch: unknown;
   };
@@ -45,8 +49,17 @@ function stepNamed(name: string): WorkflowStep {
 }
 
 describe("hourly collection workflow", () => {
-  it("runs hourly or manually with one bounded collection job", () => {
+  it("runs for database deployments, hourly, or manually", () => {
     expect(workflow.name).toBe("Hourly collection");
+    expect(workflow.on.push).toEqual({
+      branches: ["main"],
+      paths: [
+        ".github/workflows/hourly-collection.yml",
+        "packages/db/migrations/**",
+        "packages/db/src/seed-candidates.ts",
+        "packages/db/src/seed-run.ts",
+      ],
+    });
     expect(workflow.on.schedule).toEqual([{ cron: "0 * * * *" }]);
     expect(workflow.on).toHaveProperty("workflow_dispatch");
     expect(workflow.permissions).toEqual({ contents: "read" });
