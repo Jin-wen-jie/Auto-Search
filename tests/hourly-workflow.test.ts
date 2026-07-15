@@ -100,6 +100,8 @@ describe("hourly collection workflow", () => {
     expect(stepNamed("Seed database").env).toEqual({
       DATABASE_URL: "${{ secrets.DATABASE_URL }}",
     });
+    expect(stepNamed("Seed database").if).toContain("workflow_dispatch");
+    expect(stepNamed("Seed database").if).toContain("packages/db/src/seed");
     expect(stepNamed("Run bounded collection").env).toEqual({
       DATABASE_URL: "${{ secrets.DATABASE_URL }}",
       VALIDATOR_SHARED_TOKEN: "${{ secrets.VALIDATOR_SHARED_TOKEN }}",

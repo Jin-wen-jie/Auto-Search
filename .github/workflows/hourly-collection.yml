@@ -71,6 +71,7 @@ jobs:
           done
 
       - name: Seed database
+        if: github.event_name == 'workflow_dispatch' || contains(toJSON(github.event.commits), 'packages/db/src/seed')
         shell: bash
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
