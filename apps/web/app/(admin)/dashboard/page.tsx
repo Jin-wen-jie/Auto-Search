@@ -9,10 +9,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export default async function DashboardPage() {
-  await refreshApprovedCandidatePrices();
+  const refresh = await refreshApprovedCandidatePrices();
   const [rows, counts] = await Promise.all([
     listRankingViews(),
     getDashboardCounts(),
   ]);
-  return <DashboardView rows={rows} counts={counts} />;
+  return <DashboardView rows={rows} counts={counts} refresh={refresh} />;
 }

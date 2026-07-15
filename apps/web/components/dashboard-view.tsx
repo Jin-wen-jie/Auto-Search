@@ -31,9 +31,11 @@ const supplyColumns: Column<RankingView>[] = [
 export function DashboardView({
   rows,
   counts,
+  refresh,
 }: {
   rows: RankingView[];
   counts: { candidates: number; merchants: number; listings: number };
+  refresh: { attempted: number; updated: number; failures: string[] };
 }) {
   const [tab, setTab] = useState<"price" | "supply">("price");
   const router = useRouter();
@@ -46,7 +48,11 @@ export function DashboardView({
   }, [router]);
 
   return (
-    <div>
+    <div
+      data-refresh-attempted={refresh.attempted}
+      data-refresh-updated={refresh.updated}
+      data-refresh-failures={refresh.failures.join(",")}
+    >
       <h2 className="mb-1 text-xl font-bold text-gray-900">K12 / Bug Team 比价总览</h2>
       <p className="mb-4 text-xs text-gray-500">
         PostgreSQL 事实数据：{counts.candidates} 条候选 · {counts.merchants} 个保留商家 · {counts.listings} 条已通过商品。总览直接展示候选审核中点击“通过”的 K12 / Bug Team 商品。

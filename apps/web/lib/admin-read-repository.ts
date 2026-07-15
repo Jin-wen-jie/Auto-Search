@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   discoveryCandidates,
@@ -131,11 +131,12 @@ export async function fetchLdxpListingSnapshot(
   };
 }
 
-export async function refreshApprovedCandidatePrices(
-  maxAgeMs = 60_000,
-): Promise<{ attempted: number; updated: number }> {
+export async function refreshApprovedCandidatePrices(): Promise<{
+  attempted: number;
+  updated: number;
+  failures: string[];
+}> {
   const db = getDatabase();
-  const cutoff = new Date(Date.now() - maxAgeMs);
   const candidates = await db
     .select({
       id: discoveryCandidates.id,
@@ -143,13 +144,8 @@ export async function refreshApprovedCandidatePrices(
       extractionResult: discoveryCandidates.extractionResult,
     })
     .from(discoveryCandidates)
-    .where(
-      and(
-        eq(discoveryCandidates.status, "APPROVED"),
-        lt(discoveryCandidates.updatedAt, cutoff),
-      ),
-    )
-    .orderBy(asc(discoveryCandidates.updatedAt))
+    .where(eq(discoveryCandidates.status, "APPROVED"))
+    .orderBy(desc(discoveryCandidates.updatedAt))
     .limit(50);
 
   const results = await Promise.allSettled(
@@ -185,6 +181,17 @@ export async function refreshApprovedCandidatePrices(
     updated: results.filter(
       (result) => result.status === "fulfilled" && result.value,
     ).length,
+    failures: [
+      ...new Set(
+        results.flatMap((result) =>
+          result.status === "rejected"
+            ? [failureCategory(result.reason)]
+            : result.value
+              ? []
+              : ["NOT_UPDATED"]
+        ),
+      ),
+    ],
   };
 }
 
@@ -294,4 +301,13 @@ function numberValue(value: unknown): number | null {
 function moneyValue(value: string): number {
   const parsed = Number(value.replace(/[^0-9.-]/g, ""));
   return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
+function failureCategory(error: unknown): string {
+  if (error instanceof z.ZodError) return "INVALID_RESPONSE";
+  if (error instanceof Error) {
+    if (error.name === "TimeoutError") return "TIMEOUT";
+    if (/^[A-Z0-9_]+$/.test(error.message)) return error.message;
+  }
+  return "REFRESH_FAILED";
 }
