@@ -161,7 +161,7 @@ describe("admin read model", () => {
     });
     expect(request).toHaveBeenNthCalledWith(
       3,
-      "https://pay.ldxp.cn/shopApi/Shop/getGoodsPrice",
+      "https://www.ldxp.cn/shopApi/Shop/getGoodsPrice",
       expect.objectContaining({
         body: JSON.stringify({
           goods_key: "f1vz1u",

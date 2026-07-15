@@ -200,7 +200,7 @@ async function postLdxp(
   path: string,
   body: Record<string, unknown>,
 ): Promise<unknown> {
-  const response = await request(`https://pay.ldxp.cn${path}`, {
+  const response = await request(`https://www.ldxp.cn${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
