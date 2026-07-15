@@ -10,9 +10,48 @@ vi.mock("./database", () => ({
 }));
 
 import {
+  listCandidates,
   normalizeCandidate,
   reviewCandidate,
 } from "./candidate-repository.js";
+
+describe("candidate repository listing", () => {
+  it("returns only candidates that still need review", async () => {
+    let whereCondition: { getSQL(): unknown } | undefined;
+    const query = {
+      from: vi.fn(),
+      leftJoin: vi.fn(),
+      where: vi.fn((condition: { getSQL(): unknown }) => {
+        whereCondition = condition;
+        return query;
+      }),
+      orderBy: vi.fn(),
+      limit: vi.fn(),
+      offset: vi.fn().mockResolvedValue([]),
+    };
+    query.from.mockReturnValue(query);
+    query.leftJoin.mockReturnValue(query);
+    query.orderBy.mockReturnValue(query);
+    query.limit.mockReturnValue(query);
+    mocks.getDatabase.mockReturnValue({
+      select: vi.fn().mockReturnValue(query),
+    });
+
+    await expect(listCandidates()).resolves.toMatchObject({
+      items: [],
+      total: 0,
+    });
+    expect(whereCondition).toBeDefined();
+    if (!whereCondition) throw new Error("where condition was not captured");
+    const sqlQuery = new PgDialect().sqlToQuery(whereCondition.getSQL() as never);
+    expect(sqlQuery.params).toEqual(
+      expect.arrayContaining(["DISCOVERED", "REVIEW_REQUIRED"]),
+    );
+    expect(sqlQuery.params).not.toEqual(
+      expect.arrayContaining(["APPROVED", "REJECTED"]),
+    );
+  });
+});
 
 function createDatabase({
   status,

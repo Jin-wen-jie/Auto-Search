@@ -54,7 +54,15 @@ export async function listCandidates(options: {
       discoveryEvents,
       eq(discoveryCandidates.discoveryEventId, discoveryEvents.id),
     )
-    .where(sql`(${focus} is null or ${focus} in ('K12', 'Bug Team'))`)
+    .where(
+      and(
+        inArray(discoveryCandidates.status, [
+          "DISCOVERED",
+          "REVIEW_REQUIRED",
+        ]),
+        sql`(${focus} is null or ${focus} in ('K12', 'Bug Team'))`,
+      ),
+    )
     .orderBy(
       sql`case when ${focus} in ('K12', 'Bug Team') then 0 else 1 end`,
       desc(discoveryCandidates.createdAt),

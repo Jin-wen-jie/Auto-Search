@@ -102,18 +102,14 @@ export default function CandidatesClient({
     if (reviewingIdsRef.current.has(id)) return;
     const previousStatus = candidates.find((candidate) => candidate.id === id)?.status;
     if (!previousStatus) return;
-    const optimisticStatus = action === "approve" ? "APPROVED" : "REJECTED";
 
     setError("");
     reviewingIdsRef.current.add(id);
     setReviewingIds(new Set(reviewingIdsRef.current));
     setCandidates((current) =>
-      current.map((candidate) =>
-        candidate.id === id
-          ? { ...candidate, status: optimisticStatus }
-          : candidate,
-      ),
+      current.filter((candidate) => candidate.id !== id),
     );
+    setTotal((current) => Math.max(0, current - 1));
 
     try {
       const response = await fetch(`/api/candidates/${id}/review`, {
@@ -129,21 +125,9 @@ export default function CandidatesClient({
         status?: string;
       };
       if (!response.ok) throw new Error(result.error ?? "审核失败");
-      setCandidates((current) =>
-        current.map((candidate) =>
-          candidate.id === id
-            ? { ...candidate, status: result.status ?? optimisticStatus }
-            : candidate,
-        ),
-      );
+      await fetchCandidates(page);
     } catch (cause) {
-      setCandidates((current) =>
-        current.map((candidate) =>
-          candidate.id === id
-            ? { ...candidate, status: previousStatus }
-            : candidate,
-        ),
-      );
+      await fetchCandidates(page);
       setError(cause instanceof Error ? cause.message : "审核失败");
     } finally {
       reviewingIdsRef.current.delete(id);
