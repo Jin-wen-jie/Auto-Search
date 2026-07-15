@@ -87,6 +87,7 @@ export const CANDIDATE_VALIDATION_LEASE_MS = 5 * 60 * 1_000;
 const MAX_DISCOVERED_PLATFORM_LINKS = 50;
 const MAX_DISCOVERED_URL_LENGTH = 2_048;
 const MAX_PUBLIC_SEARCH_CANDIDATES = 200;
+const PUBLIC_SEARCH_TRANSACTION_BATCH_SIZE = 20;
 const PRICE_CHANGE_ALERT_RATIO = 0.1;
 const PRICE_ANOMALY_RATIO = 0.5;
 
@@ -333,111 +334,33 @@ export function createWorkerRepositoryFromDb(
 
     async savePublicSearchRun(result) {
       const observedAt = now();
-      return db.transaction(async (tx) => {
-        let inserted = 0;
-        for (
-          const candidate of result.candidates.slice(
-            0,
-            MAX_PUBLIC_SEARCH_CANDIDATES,
+      const candidates = result.candidates.slice(
+        0,
+        MAX_PUBLIC_SEARCH_CANDIDATES,
+      );
+      let inserted = 0;
+      for (
+        let offset = 0;
+        offset < candidates.length;
+        offset += PUBLIC_SEARCH_TRANSACTION_BATCH_SIZE
+      ) {
+        inserted += await db.transaction((tx) =>
+          savePublicSearchCandidates(
+            tx,
+            candidates.slice(
+              offset,
+              offset + PUBLIC_SEARCH_TRANSACTION_BATCH_SIZE,
+            ),
+            observedAt,
           )
-        ) {
-          const canonicalUrl = canonicalizeUrl(candidate.url);
-          if (canonicalUrl.length > MAX_DISCOVERED_URL_LENGTH) continue;
-          const id = randomUUID();
-          const eventId = randomUUID();
-          const fingerprint = fingerprintUrl(canonicalUrl);
-          const [previous] = await tx
-            .select({
-              id: discoveryCandidates.id,
-              extractionResult: discoveryCandidates.extractionResult,
-            })
-            .from(discoveryCandidates)
-            .where(eq(discoveryCandidates.urlFingerprint, fingerprint))
-            .limit(1);
-          const nextExtraction = publicSearchExtraction(candidate, observedAt);
-          const previousExtraction = isRecord(previous?.extractionResult)
-            ? previous.extractionResult
-            : {};
-          const change = classifyCandidateChange(
-            previousExtraction,
-            nextExtraction,
-          );
-          const [saved] = await tx
-            .insert(discoveryCandidates)
-            .values({
-              id,
-              productUrl: canonicalUrl,
-              canonicalUrl,
-              urlFingerprint: fingerprint,
-              sourceType: "manual",
-              discoveryEventId: eventId,
-              status: "DISCOVERED",
-              extractionResult: nextExtraction,
-              createdAt: observedAt,
-              updatedAt: observedAt,
-            })
-            .onConflictDoNothing({ target: discoveryCandidates.urlFingerprint })
-            .returning({ id: discoveryCandidates.id });
-          const candidateId = saved?.id ?? previous?.id;
-          if (!candidateId) continue;
-          if (saved) {
-            await tx.insert(discoveryEvents).values({
-              id: eventId,
-              sourceUrl: candidate.sourceUrl ?? canonicalUrl,
-              platform: candidate.engine,
-              summary: [candidate.title, candidate.snippet]
-                .filter(Boolean)
-                .join(" - ")
-                .slice(0, 2_000),
-              discoveredAt: observedAt,
-            });
-            inserted++;
-          } else if (!change.anomalous && previous) {
-            await tx
-              .update(discoveryCandidates)
-              .set({
-                extractionResult: {
-                  ...previousExtraction,
-                  ...nextExtraction,
-                },
-                updatedAt: observedAt,
-              })
-              .where(eq(discoveryCandidates.id, previous.id));
-          }
-
-          await tx.insert(candidateObservations).values({
-            id: randomUUID(),
-            candidateId,
-            ...(candidate.metadata?.price === undefined
-              ? {}
-              : { price: String(candidate.metadata.price) }),
-            ...(candidate.metadata?.price === undefined
-              ? {}
-              : { totalPrice: String(candidate.metadata.price) }),
-            currency: candidate.metadata?.currency ?? null,
-            inventory: candidate.metadata?.inventory ?? null,
-            availability: candidate.metadata?.availability ?? "UNKNOWN",
-            sourceEngine: candidate.engine,
-            anomalous: change.anomalous,
-            observedAt,
-          });
-          for (const alert of buildCandidateAlerts(
-            candidateId,
-            candidate.title,
-            change,
-            observedAt,
-          )) {
-            await tx.insert(alertEvents).values(alert).onConflictDoNothing({
-              target: alertEvents.dedupeKey,
-            });
-          }
-        }
-
-        const status = publicSearchStatus(result);
-        const failedEngines = result.engines.filter(
-          (engine) => engine.status !== "ACTIVE",
         );
-        await tx
+      }
+
+      const status = publicSearchStatus(result);
+      const failedEngines = result.engines.filter(
+        (engine) => engine.status !== "ACTIVE",
+      );
+      await db
           .insert(watchSources)
           .values({
             id: "src-web-public-search",
@@ -473,13 +396,110 @@ export function createWorkerRepositoryFromDb(
             },
           });
 
-        return {
-          inserted,
-          deduped: result.candidates.length - inserted,
-        };
-      });
+      return {
+        inserted,
+        deduped: result.candidates.length - inserted,
+      };
     },
   };
+}
+
+async function savePublicSearchCandidates(
+  tx: Transaction,
+  candidates: PublicSearchCandidate[],
+  observedAt: Date,
+): Promise<number> {
+  let inserted = 0;
+  for (const candidate of candidates) {
+    const canonicalUrl = canonicalizeUrl(candidate.url);
+    if (canonicalUrl.length > MAX_DISCOVERED_URL_LENGTH) continue;
+    const id = randomUUID();
+    const eventId = randomUUID();
+    const fingerprint = fingerprintUrl(canonicalUrl);
+    const [previous] = await tx
+      .select({
+        id: discoveryCandidates.id,
+        extractionResult: discoveryCandidates.extractionResult,
+      })
+      .from(discoveryCandidates)
+      .where(eq(discoveryCandidates.urlFingerprint, fingerprint))
+      .limit(1);
+    const nextExtraction = publicSearchExtraction(candidate, observedAt);
+    const previousExtraction = isRecord(previous?.extractionResult)
+      ? previous.extractionResult
+      : {};
+    const change = classifyCandidateChange(previousExtraction, nextExtraction);
+    const [saved] = await tx
+      .insert(discoveryCandidates)
+      .values({
+        id,
+        productUrl: canonicalUrl,
+        canonicalUrl,
+        urlFingerprint: fingerprint,
+        sourceType: "manual",
+        discoveryEventId: eventId,
+        status: "DISCOVERED",
+        extractionResult: nextExtraction,
+        createdAt: observedAt,
+        updatedAt: observedAt,
+      })
+      .onConflictDoNothing({ target: discoveryCandidates.urlFingerprint })
+      .returning({ id: discoveryCandidates.id });
+    const candidateId = saved?.id ?? previous?.id;
+    if (!candidateId) continue;
+    if (saved) {
+      await tx.insert(discoveryEvents).values({
+        id: eventId,
+        sourceUrl: candidate.sourceUrl ?? canonicalUrl,
+        platform: candidate.engine,
+        summary: [candidate.title, candidate.snippet]
+          .filter(Boolean)
+          .join(" - ")
+          .slice(0, 2_000),
+        discoveredAt: observedAt,
+      });
+      inserted++;
+    } else if (!change.anomalous && previous) {
+      await tx
+        .update(discoveryCandidates)
+        .set({
+          extractionResult: {
+            ...previousExtraction,
+            ...nextExtraction,
+          },
+          updatedAt: observedAt,
+        })
+        .where(eq(discoveryCandidates.id, previous.id));
+    }
+
+    await tx.insert(candidateObservations).values({
+      id: randomUUID(),
+      candidateId,
+      ...(candidate.metadata?.price === undefined
+        ? {}
+        : { price: String(candidate.metadata.price) }),
+      ...(candidate.metadata?.price === undefined
+        ? {}
+        : { totalPrice: String(candidate.metadata.price) }),
+      currency: candidate.metadata?.currency ?? null,
+      inventory: candidate.metadata?.inventory ?? null,
+      availability: candidate.metadata?.availability ?? "UNKNOWN",
+      sourceEngine: candidate.engine,
+      anomalous: change.anomalous,
+      observedAt,
+    });
+    for (const alert of buildCandidateAlerts(
+      candidateId,
+      candidate.title,
+      change,
+      observedAt,
+    )) {
+      await tx.insert(alertEvents).values(alert).onConflictDoNothing({
+        target: alertEvents.dedupeKey,
+      });
+    }
+  }
+  return inserted;
 }
 
 function positiveNumber(value: unknown): number | null {

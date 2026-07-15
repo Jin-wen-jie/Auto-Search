@@ -515,6 +515,7 @@ describe("public search persistence", () => {
       update: vi.fn().mockReturnValue({ set: updateSet }),
     };
     const db = {
+      insert,
       transaction: vi.fn(async (
         operation: (transaction: typeof tx) => Promise<unknown>,
       ) => operation(tx)),
