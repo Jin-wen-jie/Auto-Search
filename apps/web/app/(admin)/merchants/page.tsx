@@ -11,9 +11,14 @@ const columns: Column<Merchant>[] = [
   { key: "platform", header: "来源平台", render: (row) => <span className="text-xs text-gray-700">{row.platform}</span> },
   { key: "listings", header: "在售商品", render: (row) => <span className="font-mono font-semibold text-gray-900">{row.activeListings}</span> },
   { key: "score", header: "可靠度", render: (row) => <div className="min-w-20"><div className="font-mono text-xs font-semibold text-gray-900">{row.reliabilityScore}%</div><div className="mt-1 h-1.5 overflow-hidden rounded bg-gray-200"><div className={`h-full ${row.reliabilityScore >= 80 ? "bg-green-600" : row.reliabilityScore >= 60 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${row.reliabilityScore}%` }} /></div></div> },
-  { key: "verified", header: "最后核验", render: (row) => row.lastVerifiedAt ? <span className="text-xs text-gray-600">{new Date(row.lastVerifiedAt).toLocaleString("zh-CN")}</span> : <span className="text-xs text-gray-500">待验证</span> },
+  { key: "verified", header: "最后核验", render: (row) => row.lastVerifiedAt ? <span className="text-xs text-gray-600">{formatChinaTime(row.lastVerifiedAt)}</span> : <span className="text-xs text-gray-500">待验证</span> },
   { key: "status", header: "状态", render: (row) => <StatusBadge status={row.status} /> },
 ];
+
+function formatChinaTime(value: string): string {
+  const adjusted = new Date(new Date(value).getTime() + 8 * 60 * 60 * 1_000);
+  return adjusted.toISOString().replace("T", " ").slice(0, 19);
+}
 
 export default async function MerchantsPage() {
   const rows = await listMerchantViews();

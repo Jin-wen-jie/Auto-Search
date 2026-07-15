@@ -16,7 +16,7 @@ const priceColumns: Column<RankingView>[] = [
   { key: "recommendation", header: "推荐度", render: (row) => <span className={`font-mono text-xs font-semibold ${(row.confidence ?? 0) >= 80 ? "text-green-700" : "text-gray-700"}`}>{row.confidence === null ? "—" : `${row.confidence}%`}</span> },
   { key: "product", header: "商品页", render: (row) => <ExternalLink href={row.productUrl}>打开</ExternalLink> },
   { key: "source", header: "公开来源", render: (row) => row.sourceUrl ? <ExternalLink href={row.sourceUrl}>来源</ExternalLink> : <span className="text-xs text-gray-500">手工</span> },
-  { key: "verified", header: "最后成功核验", render: (row) => <span className="text-xs text-gray-600">{new Date(row.lastVerified).toLocaleString("zh-CN")}</span> },
+  { key: "verified", header: "最后成功核验", render: (row) => <span className="text-xs text-gray-600">{formatChinaTime(row.lastVerified)}</span> },
 ];
 
 const supplyColumns: Column<RankingView>[] = [
@@ -28,7 +28,7 @@ const supplyColumns: Column<RankingView>[] = [
   { key: "product", header: "商品页", render: (row) => <ExternalLink href={row.productUrl}>打开</ExternalLink> },
   { key: "source", header: "公开来源", render: (row) => row.sourceUrl ? <ExternalLink href={row.sourceUrl}>来源</ExternalLink> : <span className="text-xs text-gray-500">手工</span> },
   { key: "merchantLink", header: "店铺", render: (row) => row.merchantUrl ? <ExternalLink href={row.merchantUrl}>店铺</ExternalLink> : <span className="text-xs text-gray-500">—</span> },
-  { key: "verified", header: "最后成功核验", render: (row) => <span className="text-xs text-gray-600">{new Date(row.lastVerified).toLocaleString("zh-CN")}</span> },
+  { key: "verified", header: "最后成功核验", render: (row) => <span className="text-xs text-gray-600">{formatChinaTime(row.lastVerified)}</span> },
 ];
 
 function AvailabilityBadge({
@@ -298,4 +298,9 @@ function clientFailureCategory(error: unknown): string {
   if (error instanceof TypeError) return "BROWSER_FETCH_FAILED";
   if (error.name === "TimeoutError") return "TIMEOUT";
   return "CLIENT_REFRESH_FAILED";
+}
+
+function formatChinaTime(value: string): string {
+  const adjusted = new Date(new Date(value).getTime() + 8 * 60 * 60 * 1_000);
+  return adjusted.toISOString().replace("T", " ").slice(0, 19);
 }

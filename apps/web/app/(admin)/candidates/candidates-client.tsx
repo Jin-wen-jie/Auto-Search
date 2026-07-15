@@ -225,7 +225,7 @@ export default function CandidatesClient({
     { key: "title", header: "商品", render: (r) => <div><div className="font-semibold text-gray-900">{r.title ?? <span className="italic text-gray-500">待抽取</span>}</div>{r.price && <span className="font-mono text-xs text-gray-600">{r.price}</span>}</div> },
     { key: "merchant", header: "商家", render: (r) => <span className="text-gray-800">{r.merchantName ?? <span className="text-gray-400">—</span>}</span> },
     { key: "focus", header: "关注", render: (r) => r.focus ? <span className="rounded bg-amber-100 px-2 py-1 text-xs font-bold text-amber-900">{r.focus}</span> : <span className="text-gray-400">—</span> },
-    { key: "evidence", header: "公开证据", render: (r) => <div className="max-w-xs text-xs text-gray-700"><div>{r.evidenceNote ?? r.availability ?? "待进一步核验"}</div>{(r.sold !== null || r.inventory !== null) && <div className="mt-1 font-mono text-gray-500">已售 {r.sold ?? "—"} · 库存 {r.inventory ?? "—"}</div>}{r.observedAt && <div className="mt-1 text-gray-500">核验：{new Date(r.observedAt).toLocaleString("zh-CN")}</div>}</div> },
+    { key: "evidence", header: "公开证据", render: (r) => <div className="max-w-xs text-xs text-gray-700"><div>{r.evidenceNote ?? r.availability ?? "待进一步核验"}</div>{(r.sold !== null || r.inventory !== null) && <div className="mt-1 font-mono text-gray-500">已售 {r.sold ?? "—"} · 库存 {r.inventory ?? "—"}</div>}{r.observedAt && <div className="mt-1 text-gray-500">核验：{formatChinaTime(r.observedAt)}</div>}</div> },
     { key: "sourceType", header: "来源", render: (r) => <span className="font-medium text-gray-700">{r.sourceType.toUpperCase()}</span> },
     { key: "status", header: "状态", render: (r) => <StatusBadge status={r.status} /> },
     { key: "confidence", header: "可信度", render: (r) => <div className="min-w-20"><div className="flex items-center gap-1 text-xs font-semibold text-gray-800"><ShieldCheck className="h-3.5 w-3.5" />{r.confidence}%</div><div className="mt-1 h-1.5 overflow-hidden rounded bg-gray-200"><div className={`h-full ${r.confidence >= 80 ? "bg-green-600" : r.confidence >= 60 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${r.confidence}%` }} /></div></div> },
@@ -463,4 +463,9 @@ function recordValue(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function formatChinaTime(value: string): string {
+  const adjusted = new Date(new Date(value).getTime() + 8 * 60 * 60 * 1_000);
+  return adjusted.toISOString().replace("T", " ").slice(0, 19);
 }

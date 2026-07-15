@@ -45,7 +45,7 @@ const columns: Column<SourceView>[] = [
     render: (row) => (
       <span className="text-xs text-gray-600">
         {row.lastRunAt
-          ? new Date(row.lastRunAt).toLocaleString("zh-CN")
+          ? formatChinaTime(row.lastRunAt)
           : "从未运行"}
       </span>
     ),
@@ -86,7 +86,7 @@ const alertColumns: Column<AlertView>[] = [
   { key: "kind", header: "类型", render: (row) => <span className={`rounded px-2 py-1 text-xs font-semibold ${row.severity === "warning" ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-800"}`}>{row.kind === "PRICE_DROP" ? "降价" : row.kind === "RESTOCKED" ? "补货" : "价格异常"}</span> },
   { key: "title", header: "提醒", render: (row) => <span className="font-medium text-gray-900">{row.title}</span> },
   { key: "change", header: "变化", render: (row) => <span className="font-mono text-xs text-gray-700">{row.summary}</span> },
-  { key: "time", header: "发生时间", render: (row) => <span className="text-xs text-gray-600">{new Date(row.createdAt).toLocaleString("zh-CN")}</span> },
+  { key: "time", header: "发生时间", render: (row) => <span className="text-xs text-gray-600">{formatChinaTime(row.createdAt)}</span> },
   { key: "product", header: "商品", render: (row) => <ExternalLink href={row.productUrl}>查看</ExternalLink> },
 ];
 
@@ -128,4 +128,9 @@ export default async function JobsPage() {
       </p>
     </div>
   );
+}
+
+function formatChinaTime(value: string): string {
+  const adjusted = new Date(new Date(value).getTime() + 8 * 60 * 60 * 1_000);
+  return adjusted.toISOString().replace("T", " ").slice(0, 19);
 }
