@@ -4,6 +4,7 @@ import {
   asc,
   createDb,
   discoveryCandidates,
+  discoveryEvents,
   eq,
   inArray,
   linkChecks,
@@ -11,6 +12,7 @@ import {
   listings,
   lt,
   or,
+  watchSources,
   type Db,
   type Transaction,
 } from "@compare/db";
@@ -19,6 +21,10 @@ import {
   ValidatorClientError,
   type ValidatorResponse,
 } from "./validator-client.js";
+import {
+  DEFAULT_PUBLIC_SEARCH_QUERIES,
+  type PublicSearchResult,
+} from "./jobs/revalidate.js";
 
 export function mergeCandidateExtraction(
   existingValue: unknown,
@@ -51,7 +57,14 @@ export function mergeCandidateExtraction(
 }
 
 export interface WorkerRepositoryRuntime extends WorkerRepository {
+  savePublicSearchRun: (
+    result: PublicSearchResult,
+  ) => Promise<{ inserted: number; deduped: number }>;
   close: () => Promise<void>;
+}
+
+export interface WorkerRepositoryWithDiscovery extends WorkerRepository {
+  savePublicSearchRun: WorkerRepositoryRuntime["savePublicSearchRun"];
 }
 
 export const CANDIDATE_VALIDATION_LEASE_MS = 5 * 60 * 1_000;
@@ -79,7 +92,7 @@ export function createWorkerRepository(
 export function createWorkerRepositoryFromDb(
   db: Db,
   options: WorkerRepositoryOptions = {},
-): WorkerRepository {
+): WorkerRepositoryWithDiscovery {
   const now = options.now ?? (() => new Date());
   const candidateLeaseMs = options.candidateLeaseMs ??
     CANDIDATE_VALIDATION_LEASE_MS;
@@ -290,7 +303,117 @@ export function createWorkerRepositoryFromDb(
         });
       });
     },
+
+    async savePublicSearchRun(result) {
+      const observedAt = now();
+      return db.transaction(async (tx) => {
+        let inserted = 0;
+        for (const candidate of result.candidates.slice(0, 50)) {
+          const canonicalUrl = canonicalizeUrl(candidate.url);
+          if (canonicalUrl.length > MAX_DISCOVERED_URL_LENGTH) continue;
+          const id = randomUUID();
+          const eventId = randomUUID();
+          const [saved] = await tx
+            .insert(discoveryCandidates)
+            .values({
+              id,
+              productUrl: canonicalUrl,
+              canonicalUrl,
+              urlFingerprint: fingerprintUrl(canonicalUrl),
+              sourceType: "manual",
+              discoveryEventId: eventId,
+              status: "DISCOVERED",
+              extractionResult: {
+                pageTitle: candidate.title || undefined,
+                focus: candidate.focus,
+                sourceEngine: candidate.engine,
+                searchSnippet: candidate.snippet || undefined,
+                note:
+                  `Public web search result from ${candidate.engine}; ` +
+                  "awaiting page validation.",
+                observedAt: observedAt.toISOString(),
+              },
+              createdAt: observedAt,
+              updatedAt: observedAt,
+            })
+            .onConflictDoNothing({ target: discoveryCandidates.urlFingerprint })
+            .returning({ id: discoveryCandidates.id });
+          if (!saved) continue;
+          await tx.insert(discoveryEvents).values({
+            id: eventId,
+            sourceUrl: canonicalUrl,
+            platform: candidate.engine,
+            summary: [candidate.title, candidate.snippet]
+              .filter(Boolean)
+              .join(" - ")
+              .slice(0, 2_000),
+            discoveredAt: observedAt,
+          });
+          inserted++;
+        }
+
+        const status = publicSearchStatus(result);
+        const failedEngines = result.engines.filter(
+          (engine) => engine.status !== "ACTIVE",
+        );
+        await tx
+          .insert(watchSources)
+          .values({
+            id: "src-web-public-search",
+            platform: "web",
+            keywords: [...DEFAULT_PUBLIC_SEARCH_QUERIES],
+            excludeKeywords: [],
+            publicChannels: [],
+            status,
+            lastRunAt: observedAt,
+            lastRunResult: {
+              discoveredCount: result.candidates.length,
+              insertedCount: inserted,
+              dedupedCount: result.candidates.length - inserted,
+              engines: result.engines,
+              errorCategory: failedEngines[0]?.errorCategory ?? null,
+            },
+            createdAt: observedAt,
+            updatedAt: observedAt,
+          })
+          .onConflictDoUpdate({
+            target: watchSources.id,
+            set: {
+              status,
+              lastRunAt: observedAt,
+              lastRunResult: {
+                discoveredCount: result.candidates.length,
+                insertedCount: inserted,
+                dedupedCount: result.candidates.length - inserted,
+                engines: result.engines,
+                errorCategory: failedEngines[0]?.errorCategory ?? null,
+              },
+              updatedAt: observedAt,
+            },
+          });
+
+        return {
+          inserted,
+          deduped: result.candidates.length - inserted,
+        };
+      });
+    },
   };
+}
+
+function publicSearchStatus(
+  result: PublicSearchResult,
+): "ACTIVE" | "AUTH_DISABLED" | "RATE_LIMITED" | "ERROR" {
+  if (result.engines.some((engine) => engine.status === "ACTIVE")) {
+    return "ACTIVE";
+  }
+  if (result.engines.some((engine) => engine.status === "RATE_LIMITED")) {
+    return "RATE_LIMITED";
+  }
+  if (result.engines.some((engine) => engine.status === "AUTH_DISABLED")) {
+    return "AUTH_DISABLED";
+  }
+  return "ERROR";
 }
 
 async function insertDiscoveredPlatformLinks(

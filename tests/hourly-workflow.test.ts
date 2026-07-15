@@ -50,7 +50,7 @@ function stepNamed(name: string): WorkflowStep {
 
 describe("hourly collection workflow", () => {
   it("runs for database deployments, hourly, or manually", () => {
-    expect(workflow.name).toBe("Hourly collection");
+    expect(workflow.name).toBe("Public web collection");
     expect(workflow.on.push).toEqual({
       branches: ["main"],
       paths: [
@@ -58,9 +58,10 @@ describe("hourly collection workflow", () => {
         "packages/db/migrations/**",
         "packages/db/src/seed-candidates.ts",
         "packages/db/src/seed-run.ts",
+        "apps/worker/**",
       ],
     });
-    expect(workflow.on.schedule).toEqual([{ cron: "0 * * * *" }]);
+    expect(workflow.on.schedule).toEqual([{ cron: "0 */3 * * *" }]);
     expect(workflow.on).toHaveProperty("workflow_dispatch");
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(workflow.concurrency).toEqual({
@@ -78,6 +79,7 @@ describe("hourly collection workflow", () => {
       LISTING_LIMIT: "50",
       WORKER_CONCURRENCY: "4",
       WORKER_DEADLINE_MS: "1500000",
+      PUBLIC_SEARCH_MAX_RESULTS: "50",
     });
   });
 
@@ -101,6 +103,10 @@ describe("hourly collection workflow", () => {
     expect(stepNamed("Run bounded collection").env).toEqual({
       DATABASE_URL: "${{ secrets.DATABASE_URL }}",
       VALIDATOR_SHARED_TOKEN: "${{ secrets.VALIDATOR_SHARED_TOKEN }}",
+      BRAVE_SEARCH_API_KEY: "${{ secrets.BRAVE_SEARCH_API_KEY }}",
+      GOOGLE_SEARCH_API_KEY: "${{ secrets.GOOGLE_SEARCH_API_KEY }}",
+      GOOGLE_SEARCH_CX: "${{ secrets.GOOGLE_SEARCH_CX }}",
+      SERPER_API_KEY: "${{ secrets.SERPER_API_KEY }}",
     });
 
     const serialized = JSON.stringify(workflow);
@@ -109,11 +115,15 @@ describe("hourly collection workflow", () => {
     const secretReferences = collect.steps.flatMap((step) =>
       Object.values(step.env ?? {}).filter((value) => value.includes("secrets.")),
     );
-    expect(secretReferences).toHaveLength(4);
+    expect(secretReferences).toHaveLength(8);
     expect(new Set(secretReferences)).toEqual(
       new Set([
         "${{ secrets.DATABASE_URL }}",
         "${{ secrets.VALIDATOR_SHARED_TOKEN }}",
+        "${{ secrets.BRAVE_SEARCH_API_KEY }}",
+        "${{ secrets.GOOGLE_SEARCH_API_KEY }}",
+        "${{ secrets.GOOGLE_SEARCH_CX }}",
+        "${{ secrets.SERPER_API_KEY }}",
       ]),
     );
     expect(workflowText).not.toMatch(/postgres(?:ql)?:\/\//i);

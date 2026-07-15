@@ -74,7 +74,7 @@ export default async function JobsPage() {
         <div>
           <h2 className="text-xl font-bold text-gray-900">K12 / Bug Team 采集任务</h2>
           <p className="mt-0.5 text-xs text-gray-500">
-            来源连接器搜索关键词仅覆盖 K12 教育资格和 Bug Team 相关商品。缺少凭据时显示为未配置，不影响手工补链。
+            多搜索引擎只调查公开的 K12 与 Bug Team 商品网页；新链接去重、验证后进入人工审核。
           </p>
         </div>
         <ManualUrlForm />
@@ -82,9 +82,8 @@ export default async function JobsPage() {
       <h3 className="mb-2 text-sm font-semibold text-gray-800">来源连接器</h3>
       <DataTable columns={columns} rows={sources} getRowKey={(row) => row.id} />
       <p className="mt-4 text-xs leading-relaxed text-gray-500">
-        X 和 Telegram 连接器需要分别在部署环境中提供有效的 Bearer Token 或
-        api_id/api_hash/session。缺少凭据时连接器显示为"未配置"，不伪造零结果。
-        调度频率：来源发现每 30 分钟，链接复检每 6 小时，汇率每日刷新。
+        Bing RSS 默认启用；Brave、Google 和 Serper 可通过部署密钥扩展覆盖范围。
+        搜索每 3 小时执行一次，单个引擎限流或失败时继续使用其他引擎，不抓取登录墙或验证码页面。
       </p>
     </div>
   );

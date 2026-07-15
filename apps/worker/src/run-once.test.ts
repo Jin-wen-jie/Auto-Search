@@ -5,6 +5,10 @@ import {
   runOnce,
 } from "./run-once.js";
 import type { WorkerRepositoryRuntime } from "./worker-repository.js";
+import {
+  DEFAULT_PUBLIC_SEARCH_QUERIES,
+  discoverPublicWeb,
+} from "./jobs/revalidate.js";
 
 const config = parseRunOnceConfig({
   DATABASE_URL: "postgres://worker-db",
@@ -16,6 +20,23 @@ const successfulResult: BatchResult = {
   listings: { attempted: 0, succeeded: 0, failed: 0 },
   timedOut: false,
 };
+
+const emptySearchResult = {
+  candidates: [],
+  engines: [{
+    engine: "bing-rss" as const,
+    status: "ACTIVE" as const,
+    resultCount: 0,
+    errorCategory: null,
+  }],
+};
+
+function repositoryWithClose(close: () => Promise<void>) {
+  return {
+    close,
+    savePublicSearchRun: vi.fn().mockResolvedValue({ inserted: 0, deduped: 0 }),
+  } as unknown as WorkerRepositoryRuntime;
+}
 
 function deferred() {
   let resolve!: () => void;
@@ -29,10 +50,11 @@ describe("runOnce", () => {
   it("awaits repository close after a successful batch", async () => {
     const closing = deferred();
     const close = vi.fn(() => closing.promise);
-    const repository = { close } as unknown as WorkerRepositoryRuntime;
+    const repository = repositoryWithClose(close);
     const invocation = runOnce(config, {
       createRepository: () => repository,
       runBatch: vi.fn().mockResolvedValue(successfulResult),
+      discoverPublicWeb: vi.fn().mockResolvedValue(emptySearchResult),
     });
     let settled = false;
     void invocation.then(() => {
@@ -49,11 +71,12 @@ describe("runOnce", () => {
   it("awaits repository close before propagating a batch failure", async () => {
     const closing = deferred();
     const close = vi.fn(() => closing.promise);
-    const repository = { close } as unknown as WorkerRepositoryRuntime;
+    const repository = repositoryWithClose(close);
     const failure = new Error("stable batch failure");
     const invocation = runOnce(config, {
       createRepository: () => repository,
       runBatch: vi.fn().mockRejectedValue(failure),
+      discoverPublicWeb: vi.fn().mockResolvedValue(emptySearchResult),
     });
     let settled = false;
     void invocation.then(
@@ -75,13 +98,14 @@ describe("runOnce", () => {
   it("preserves both batch and close failures", async () => {
     const batchFailure = new Error("stable batch failure");
     const closeFailure = new Error("stable close failure");
-    const repository = {
-      close: vi.fn().mockRejectedValue(closeFailure),
-    } as unknown as WorkerRepositoryRuntime;
+    const repository = repositoryWithClose(
+      vi.fn().mockRejectedValue(closeFailure),
+    );
 
     const failure = await runOnce(config, {
       createRepository: () => repository,
       runBatch: vi.fn().mockRejectedValue(batchFailure),
+      discoverPublicWeb: vi.fn().mockResolvedValue(emptySearchResult),
     }).catch((error: unknown) => error);
 
     expect(failure).toBeInstanceOf(AggregateError);
@@ -89,5 +113,121 @@ describe("runOnce", () => {
       message: "WORKER_BATCH_AND_CLOSE_FAILED",
       errors: [batchFailure, closeFailure],
     });
+  });
+
+  it("stores public search results before sweeping candidates", async () => {
+    const order: string[] = [];
+    const repository = repositoryWithClose(vi.fn().mockResolvedValue(undefined));
+    vi.mocked(repository.savePublicSearchRun).mockImplementation(async () => {
+      order.push("save-search");
+      return { inserted: 1, deduped: 0 };
+    });
+    const runBatch = vi.fn().mockImplementation(async () => {
+      order.push("run-batch");
+      return successfulResult;
+    });
+
+    await runOnce(config, {
+      createRepository: () => repository,
+      runBatch,
+      discoverPublicWeb: vi.fn().mockResolvedValue({
+        ...emptySearchResult,
+        candidates: [{
+          url: "https://shop.example/item/k12",
+          title: "K12 account",
+          snippet: "商品",
+          engine: "bing-rss",
+          focus: "K12",
+        }],
+      }),
+    });
+
+    expect(order).toEqual(["save-search", "run-batch"]);
+  });
+});
+
+describe("public web discovery", () => {
+  it("parses Bing RSS and deduplicates relevant public product URLs", async () => {
+    const rss = `<?xml version="1.0" encoding="utf-8"?>
+      <rss><channel>
+        <item><title>GPT Team K12 成品</title><link>https://pay.ldxp.cn/item/abc123?utm_source=bing</link><description>K12 商品库存</description></item>
+        <item><title>Bug Team account</title><link>https://shop.example/products/bug-team</link><description>Bug Team 账号商品</description></item>
+        <item><title>普通新闻</title><link>https://news.example/story</link><description>无关内容</description></item>
+      </channel></rss>`;
+    const request = async () => new Response(rss, {
+      status: 200,
+      headers: { "content-type": "application/rss+xml" },
+    });
+
+    const result = await discoverPublicWeb(
+      { maxResults: 50 },
+      request as typeof fetch,
+    );
+
+    expect(DEFAULT_PUBLIC_SEARCH_QUERIES).toHaveLength(4);
+    expect(result.engines).toEqual([
+      {
+        engine: "bing-rss",
+        status: "ACTIVE",
+        resultCount: 12,
+        errorCategory: null,
+      },
+    ]);
+    expect(result.candidates).toEqual([
+      expect.objectContaining({
+        url: "https://pay.ldxp.cn/item/abc123",
+        engine: "bing-rss",
+        focus: "K12",
+      }),
+      expect.objectContaining({
+        url: "https://shop.example/products/bug-team",
+        engine: "bing-rss",
+        focus: "Bug Team",
+      }),
+    ]);
+  });
+
+  it("isolates optional search engine failures", async () => {
+    const request = async (input: Parameters<typeof fetch>[0]) => {
+      const url = new URL(String(input));
+      if (url.hostname === "www.bing.com") {
+        return new Response(
+          "<rss><channel><title>empty</title></channel></rss>",
+          { status: 200 },
+        );
+      }
+      if (url.hostname === "api.search.brave.com") {
+        return new Response("", { status: 429 });
+      }
+      if (url.hostname === "www.googleapis.com") {
+        return Response.json({
+          items: [{
+            link: "https://store.example/item/k12",
+            title: "K12 account 商品",
+            snippet: "公开商店",
+          }],
+        });
+      }
+      return new Response("", { status: 401 });
+    };
+
+    const result = await discoverPublicWeb(
+      {
+        braveApiKey: "brave-secret",
+        googleApiKey: "google-secret",
+        googleCx: "search-engine-id",
+        serperApiKey: "serper-secret",
+        maxResults: 50,
+      },
+      request as typeof fetch,
+    );
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.engines).toEqual([
+      expect.objectContaining({ engine: "bing-rss", status: "ACTIVE" }),
+      expect.objectContaining({ engine: "brave", status: "RATE_LIMITED" }),
+      expect.objectContaining({ engine: "google", status: "ACTIVE" }),
+      expect.objectContaining({ engine: "serper", status: "AUTH_DISABLED" }),
+    ]);
   });
 });

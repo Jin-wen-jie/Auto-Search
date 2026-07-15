@@ -76,7 +76,7 @@ describe("free public deployment documentation", () => {
   it("documents the hosted architecture and exact Vercel import settings", () => {
     expect(deployment).toContain("GitHub `main` -> Vercel Hobby Web");
     expect(deployment).toContain("Supabase PostgreSQL");
-    expect(deployment).toContain("GitHub Actions `Hourly collection`");
+    expect(deployment).toContain("GitHub Actions `Public web collection`");
     expect(deployment).toContain("临时 Validator");
     expect(deployment).toContain("one-shot Worker");
 
@@ -153,11 +153,15 @@ describe("free public deployment documentation", () => {
     expect(environmentNames(repositorySecrets)).toEqual([
       "DATABASE_URL",
       "VALIDATOR_SHARED_TOKEN",
+      "BRAVE_SEARCH_API_KEY",
+      "GOOGLE_SEARCH_API_KEY",
+      "GOOGLE_SEARCH_CX",
+      "SERPER_API_KEY",
     ]);
   });
 
   it("documents collection bounds, manual runs, and first deployment order", () => {
-    expect(deployment).toContain("`0 * * * *`");
+    expect(deployment).toContain("`0 */3 * * *`");
     expect(deployment).toContain("collect job 的最终硬上限为 30 分钟");
     expect(deployment).toContain("`WORKER_DEADLINE_MS=1500000`");
     expect(deployment).toContain("25 分钟软截止");
@@ -169,7 +173,7 @@ describe("free public deployment documentation", () => {
     expect(deployment).toContain("GitHub 计划任务可能延迟");
     expect(deployment).toContain("不保证整点");
     expect(deployment).toContain(
-      "Actions -> Hourly collection -> Run workflow",
+      "Actions -> Public web collection -> Run workflow",
     );
     expect(deployment).toContain(
       "先配置 GitHub Secrets 并手动运行成功，再导入并部署 Vercel",

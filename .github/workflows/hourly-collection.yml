@@ -1,4 +1,4 @@
-name: Hourly collection
+name: Public web collection
 
 on:
   push:
@@ -9,8 +9,9 @@ on:
       - "packages/db/migrations/**"
       - "packages/db/src/seed-candidates.ts"
       - "packages/db/src/seed-run.ts"
+      - "apps/worker/**"
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0 */3 * * *"
   workflow_dispatch: {}
 
 permissions:
@@ -30,6 +31,7 @@ jobs:
       LISTING_LIMIT: "50"
       WORKER_CONCURRENCY: "4"
       WORKER_DEADLINE_MS: "1500000"
+      PUBLIC_SEARCH_MAX_RESULTS: "50"
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -66,6 +68,10 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           VALIDATOR_SHARED_TOKEN: ${{ secrets.VALIDATOR_SHARED_TOKEN }}
+          BRAVE_SEARCH_API_KEY: ${{ secrets.BRAVE_SEARCH_API_KEY }}
+          GOOGLE_SEARCH_API_KEY: ${{ secrets.GOOGLE_SEARCH_API_KEY }}
+          GOOGLE_SEARCH_CX: ${{ secrets.GOOGLE_SEARCH_CX }}
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
         run: |
           set -euo pipefail
 

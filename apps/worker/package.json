@@ -15,6 +15,7 @@
   "dependencies": {
     "@compare/db": "workspace:*",
     "@compare/domain": "workspace:*",
+    "fast-xml-parser": "5.3.6",
     "pg-boss": "12.26.0",
     "zod": "3.24.2"
   },

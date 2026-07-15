@@ -11,6 +11,10 @@ import {
   createWorkerRepository,
   type WorkerRepositoryRuntime,
 } from "./worker-repository.js";
+import {
+  discoverPublicWeb,
+  type PublicSearchConfig,
+} from "./jobs/revalidate.js";
 
 interface RunOnceConfig {
   databaseUrl: string;
@@ -20,6 +24,7 @@ interface RunOnceConfig {
   listingLimit: number;
   concurrency: number;
   deadlineMs: number;
+  publicSearch: PublicSearchConfig;
 }
 
 class RunOnceConfigError extends Error {}
@@ -27,6 +32,7 @@ class RunOnceConfigError extends Error {}
 interface RunOnceDependencies {
   createRepository: (databaseUrl: string) => WorkerRepositoryRuntime;
   runBatch: typeof runWorkerBatch;
+  discoverPublicWeb: typeof discoverPublicWeb;
 }
 
 export function parseRunOnceConfig(
@@ -46,6 +52,13 @@ export function parseRunOnceConfig(
       MAX_WORKER_CONCURRENCY,
     ),
     deadlineMs: positiveInteger(env, "WORKER_DEADLINE_MS", 1_500_000),
+    publicSearch: {
+      braveApiKey: optionalValue(env, "BRAVE_SEARCH_API_KEY"),
+      googleApiKey: optionalValue(env, "GOOGLE_SEARCH_API_KEY"),
+      googleCx: optionalValue(env, "GOOGLE_SEARCH_CX"),
+      serperApiKey: optionalValue(env, "SERPER_API_KEY"),
+      maxResults: positiveInteger(env, "PUBLIC_SEARCH_MAX_RESULTS", 50),
+    },
   };
 }
 
@@ -66,7 +79,8 @@ function positiveInteger(
     | "CANDIDATE_LIMIT"
     | "LISTING_LIMIT"
     | "WORKER_CONCURRENCY"
-    | "WORKER_DEADLINE_MS",
+    | "WORKER_DEADLINE_MS"
+    | "PUBLIC_SEARCH_MAX_RESULTS",
   defaultValue: number,
   maximum?: number,
 ): number {
@@ -83,6 +97,18 @@ function positiveInteger(
   return value;
 }
 
+function optionalValue(
+  env: Readonly<NodeJS.ProcessEnv>,
+  name:
+    | "BRAVE_SEARCH_API_KEY"
+    | "GOOGLE_SEARCH_API_KEY"
+    | "GOOGLE_SEARCH_CX"
+    | "SERPER_API_KEY",
+): string | undefined {
+  const value = env[name]?.trim();
+  return value || undefined;
+}
+
 export async function runOnce(
   config: RunOnceConfig,
   dependencies: Partial<RunOnceDependencies> = {},
@@ -90,12 +116,15 @@ export async function runOnce(
   const createRepository = dependencies.createRepository ??
     createWorkerRepository;
   const runBatch = dependencies.runBatch ?? runWorkerBatch;
+  const runDiscovery = dependencies.discoverPublicWeb ?? discoverPublicWeb;
   const repository = createRepository(config.databaseUrl);
 
   let batchOutcome:
     | { ok: true; result: BatchResult }
     | { ok: false; error: unknown };
   try {
+    const publicSearch = await runDiscovery(config.publicSearch);
+    await repository.savePublicSearchRun(publicSearch);
     const result = await runBatch({
       createHandlers: (enqueue) =>
         createJobHandlers({

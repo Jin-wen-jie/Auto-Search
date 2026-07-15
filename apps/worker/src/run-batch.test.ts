@@ -661,6 +661,13 @@ describe("parseRunOnceConfig", () => {
       listingLimit: 50,
       concurrency: 4,
       deadlineMs: 1_500_000,
+      publicSearch: {
+        braveApiKey: undefined,
+        googleApiKey: undefined,
+        googleCx: undefined,
+        serperApiKey: undefined,
+        maxResults: 50,
+      },
     });
   });
 
@@ -673,6 +680,11 @@ describe("parseRunOnceConfig", () => {
         LISTING_LIMIT: "34",
         WORKER_CONCURRENCY: "16",
         WORKER_DEADLINE_MS: "90000",
+        BRAVE_SEARCH_API_KEY: " brave-key ",
+        GOOGLE_SEARCH_API_KEY: "google-key",
+        GOOGLE_SEARCH_CX: "google-cx",
+        SERPER_API_KEY: "serper-key",
+        PUBLIC_SEARCH_MAX_RESULTS: "25",
       }),
     ).toEqual({
       databaseUrl: "postgres://worker-db",
@@ -682,6 +694,13 @@ describe("parseRunOnceConfig", () => {
       listingLimit: 34,
       concurrency: 16,
       deadlineMs: 90_000,
+      publicSearch: {
+        braveApiKey: "brave-key",
+        googleApiKey: "google-key",
+        googleCx: "google-cx",
+        serperApiKey: "serper-key",
+        maxResults: 25,
+      },
     });
   });
 
@@ -722,6 +741,11 @@ describe("parseRunOnceConfig", () => {
     ["WORKER_DEADLINE_MS", "1.5"],
     ["WORKER_DEADLINE_MS", "many"],
     ["WORKER_DEADLINE_MS", "9007199254740992"],
+    ["PUBLIC_SEARCH_MAX_RESULTS", "0"],
+    ["PUBLIC_SEARCH_MAX_RESULTS", "-1"],
+    ["PUBLIC_SEARCH_MAX_RESULTS", "1.5"],
+    ["PUBLIC_SEARCH_MAX_RESULTS", "many"],
+    ["PUBLIC_SEARCH_MAX_RESULTS", "9007199254740992"],
   ])("rejects %s=%s", (name, value) => {
     expect(() =>
       parseRunOnceConfig({ ...requiredEnv, [name]: value })

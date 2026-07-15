@@ -1,7 +1,9 @@
 import {
   createDb,
   discoveryCandidates,
+  discoveryEvents,
   linkChecks,
+  watchSources,
   type Db,
 } from "@compare/db";
 import { describe, expect, it, vi } from "vitest";
@@ -416,6 +418,89 @@ describe("worker repository mappings", () => {
       inventory: 0,
       observedAt: "2026-07-12T00:00:00.000Z",
     });
+  });
+});
+
+describe("public search persistence", () => {
+  it("deduplicates candidates and records a sanitized source run", async () => {
+    const candidateReturning = vi.fn()
+      .mockResolvedValueOnce([{ id: "candidate-new" }])
+      .mockResolvedValueOnce([]);
+    const candidateValues = vi.fn().mockReturnValue({
+      onConflictDoNothing: vi.fn().mockReturnValue({
+        returning: candidateReturning,
+      }),
+    });
+    const eventValues = vi.fn().mockResolvedValue(undefined);
+    const sourceOnConflict = vi.fn().mockResolvedValue(undefined);
+    const sourceValues = vi.fn().mockReturnValue({
+      onConflictDoUpdate: sourceOnConflict,
+    });
+    const insert = vi.fn((table: unknown) => {
+      if (table === discoveryCandidates) return { values: candidateValues };
+      if (table === discoveryEvents) return { values: eventValues };
+      if (table === watchSources) return { values: sourceValues };
+      throw new Error("unexpected table");
+    });
+    const tx = { insert };
+    const db = {
+      transaction: vi.fn(async (
+        operation: (transaction: typeof tx) => Promise<unknown>,
+      ) => operation(tx)),
+    } as unknown as Db;
+    const repository = createWorkerRepositoryFromDb(db, {
+      now: () => new Date("2026-07-15T06:00:00.000Z"),
+    });
+
+    await expect(repository.savePublicSearchRun({
+      candidates: [
+        {
+          url: "https://shop.example/item/k12",
+          title: "K12 account",
+          snippet: "公开商品",
+          engine: "bing-rss",
+          focus: "K12",
+        },
+        {
+          url: "https://shop.example/item/bug",
+          title: "Bug Team account",
+          snippet: "公开商品",
+          engine: "google",
+          focus: "Bug Team",
+        },
+      ],
+      engines: [
+        {
+          engine: "bing-rss",
+          status: "ACTIVE",
+          resultCount: 2,
+          errorCategory: null,
+        },
+        {
+          engine: "google",
+          status: "AUTH_DISABLED",
+          resultCount: 0,
+          errorCategory: "AUTH_DISABLED",
+        },
+      ],
+    })).resolves.toEqual({ inserted: 1, deduped: 1 });
+
+    expect(candidateValues).toHaveBeenCalledTimes(2);
+    expect(eventValues).toHaveBeenCalledOnce();
+    expect(sourceValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "src-web-public-search",
+        platform: "web",
+        status: "ACTIVE",
+        lastRunResult: expect.objectContaining({
+          discoveredCount: 2,
+          insertedCount: 1,
+          dedupedCount: 1,
+          errorCategory: "AUTH_DISABLED",
+        }),
+      }),
+    );
+    expect(sourceOnConflict).toHaveBeenCalledOnce();
   });
 });
 
