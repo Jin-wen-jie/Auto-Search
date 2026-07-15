@@ -39,8 +39,10 @@ function readCsrfToken(): string {
 
 export default function CandidatesClient({
   initialPage,
+  initialError = "",
 }: {
   initialPage: CandidatePage;
+  initialError?: string;
 }) {
   const [candidates, setCandidates] = useState(initialPage.items);
   const [page, setPage] = useState(initialPage.page);
@@ -53,7 +55,7 @@ export default function CandidatesClient({
   const [reviewingIds, setReviewingIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
   const candidatesRef = useRef(initialPage.items);
   const syncRunningRef = useRef(false);
 

@@ -12,6 +12,9 @@ import {
 import {
   assertAdminMutation,
 } from "../../../lib/server-auth";
+import { databaseFailureCategory } from "../../../lib/database";
+
+const APP_VERSION = "pool-v3";
 
 const createSchema = z.object({
   productUrl: z
@@ -34,12 +37,20 @@ const priceSnapshotBatchSchema = z.object({
 
 export async function GET(request: Request) {
   const searchParams = new URL(request.url).searchParams;
-  return NextResponse.json(
-    await listCandidates({
-      page: Number(searchParams.get("page") ?? 1),
-      pageSize: Number(searchParams.get("pageSize") ?? 50),
-    }),
-  );
+  try {
+    return NextResponse.json(
+      await listCandidates({
+        page: Number(searchParams.get("page") ?? 1),
+        pageSize: Number(searchParams.get("pageSize") ?? 50),
+      }),
+      { headers: { "x-app-version": APP_VERSION } },
+    );
+  } catch (error) {
+    return NextResponse.json(
+      { error: databaseFailureCategory(error) },
+      { status: 503, headers: { "x-app-version": APP_VERSION } },
+    );
+  }
 }
 
 export async function POST(request: Request) {

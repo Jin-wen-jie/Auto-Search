@@ -41,6 +41,12 @@ function transactionPoolerUrl(databaseUrl: string): string {
 }
 
 function isTransientDatabaseError(error: unknown): boolean {
+  const category = databaseFailureCategory(error);
+  return category === "DB_POOL_EXHAUSTED" ||
+    category === "DB_CONNECTION_FAILED";
+}
+
+export function databaseFailureCategory(error: unknown): string {
   const messages: string[] = [];
   let current: unknown = error;
   for (let depth = 0; depth < 4 && current; depth++) {
@@ -51,8 +57,20 @@ function isTransientDatabaseError(error: unknown): boolean {
       break;
     }
   }
-  return /EMAXCONNSESSION|max clients reached|ECONNRESET|ETIMEDOUT|CONNECT_TIMEOUT|connection terminated/i
-    .test(messages.join(" "));
+  const message = messages.join(" ");
+  if (/EMAXCONNSESSION|max clients reached/i.test(message)) {
+    return "DB_POOL_EXHAUSTED";
+  }
+  if (/tenant or user not found|invalid tenant/i.test(message)) {
+    return "DB_POOLER_CONFIGURATION";
+  }
+  if (/password authentication failed|authentication failed/i.test(message)) {
+    return "DB_AUTH_FAILED";
+  }
+  if (/ECONNRESET|ETIMEDOUT|CONNECT_TIMEOUT|connection terminated|ENOTFOUND/i.test(message)) {
+    return "DB_CONNECTION_FAILED";
+  }
+  return "DB_QUERY_FAILED";
 }
 
 function usesSupabasePooler(databaseUrl: string): boolean {
