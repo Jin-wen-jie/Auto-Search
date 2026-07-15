@@ -98,6 +98,7 @@ async function listCandidatesOnce(options: {
         ]),
         sql`(${focus} is null or ${focus} in ('K12', 'Bug Team'))`,
         sql`(${focus} is distinct from 'K12' or ${effectivePrice} is null or ${effectivePrice} <= ${1.2})`,
+        sql`${discoveryCandidates.productUrl} !~* ${"/(login|sign-in|signin|auth)(/|[?#]|$)"}`,
       ),
     )
     .orderBy(

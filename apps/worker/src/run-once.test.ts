@@ -161,6 +161,7 @@ describe("public web discovery", () => {
       <rss><channel>
         <item><title>GPT Team K12 成品</title><link>https://pay.ldxp.cn/item/abc123?utm_source=bing</link><description>K12 商品库存</description></item>
         <item><title>Bug Team account</title><link>https://shop.example/products/bug-team</link><description>Bug Team 账号商品</description></item>
+        <item><title>K12 school login</title><link>https://school.example/login</link><description>K12 account portal</description></item>
         <item><title>普通新闻</title><link>https://news.example/story</link><description>无关内容</description></item>
       </channel></rss>`;
     const request = async (input: Parameters<typeof fetch>[0]) => {
@@ -189,7 +190,7 @@ describe("public web discovery", () => {
       {
         engine: "bing-rss",
         status: "ACTIVE",
-        resultCount: 12,
+        resultCount: 16,
         errorCategory: null,
       },
     ]);

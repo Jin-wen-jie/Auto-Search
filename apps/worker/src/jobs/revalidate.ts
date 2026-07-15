@@ -576,6 +576,7 @@ function inferFocus(evidence: string): "K12" | "Bug Team" | null {
 }
 
 function looksLikeProduct(evidence: string, pathname: string): boolean {
+  if (/\/(?:login|sign[ -]?in|auth)(?:\/|$)/i.test(pathname)) return false;
   return /\/(?:item|buy|product|products)\//i.test(pathname) ||
     /商品|成品|账号|购买|库存|价格|account|shop|store/i.test(evidence);
 }
