@@ -10,6 +10,7 @@ const priceColumns: Column<RankingView>[] = [
   { key: "unitCny", header: "有效单位价", render: (row) => <span className="font-mono text-sm font-bold text-green-700">{row.unitCny}</span> },
   { key: "spec", header: "规格", render: (row) => <span className="text-xs text-gray-800">{row.spec}</span> },
   { key: "merchant", header: "商家", render: (row) => <span className="text-xs font-semibold text-gray-900">{row.merchant}</span> },
+  { key: "availability", header: "库存", render: (row) => <AvailabilityBadge availability={row.availability} /> },
   { key: "price", header: "原价", render: (row) => <span className="font-mono text-xs text-gray-700">{row.price}</span> },
   { key: "totalCny", header: "总支出", render: (row) => <span className="font-mono text-xs font-semibold text-gray-900">{row.totalCny}</span> },
   { key: "product", header: "商品页", render: (row) => <ExternalLink href={row.productUrl}>打开</ExternalLink> },
@@ -18,6 +19,7 @@ const priceColumns: Column<RankingView>[] = [
 ];
 
 const supplyColumns: Column<RankingView>[] = [
+  { key: "availability", header: "库存", render: (row) => <AvailabilityBadge availability={row.availability} /> },
   { key: "evidence", header: "货源证据", render: (row) => <span className="text-xs text-gray-800">{row.supplyEvidence}</span> },
   { key: "confidence", header: "置信度", render: (row) => <span className="font-mono text-xs text-gray-700">{row.confidence === null ? "—" : `${row.confidence}%`}</span> },
   { key: "spec", header: "规格", render: (row) => <span className="text-xs text-gray-800">{row.spec}</span> },
@@ -27,6 +29,26 @@ const supplyColumns: Column<RankingView>[] = [
   { key: "merchantLink", header: "店铺", render: (row) => row.merchantUrl ? <ExternalLink href={row.merchantUrl}>店铺</ExternalLink> : <span className="text-xs text-gray-500">—</span> },
   { key: "verified", header: "最后成功核验", render: (row) => <span className="text-xs text-gray-600">{new Date(row.lastVerified).toLocaleString("zh-CN")}</span> },
 ];
+
+function AvailabilityBadge({
+  availability,
+}: {
+  availability: RankingView["availability"];
+}) {
+  const display = availability === "IN_STOCK"
+    ? { label: "有货", className: "bg-green-100 text-green-800" }
+    : availability === "OUT_OF_STOCK"
+      ? { label: "无货", className: "bg-red-100 text-red-800" }
+      : { label: "待核验", className: "bg-gray-100 text-gray-700" };
+
+  return (
+    <span
+      className={`inline-flex min-w-12 items-center justify-center rounded px-2 py-1 text-xs font-semibold ${display.className}`}
+    >
+      {display.label}
+    </span>
+  );
+}
 
 export function DashboardView({
   rows,

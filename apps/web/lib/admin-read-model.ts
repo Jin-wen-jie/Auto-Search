@@ -25,6 +25,7 @@ export interface RankingView {
   totalCny: string;
   unitCny: string;
   supplyEvidence: string;
+  availability: "IN_STOCK" | "OUT_OF_STOCK" | "UNKNOWN";
   confidence: number | null;
   lastVerified: string;
   productUrl: string;
@@ -53,10 +54,10 @@ export function toApprovedCandidateRankingView(
   const sourceUrl =
     stringValue(extraction.sourceUrl) ?? input.eventSourceUrl;
   const focus = stringValue(extraction.focus) ?? "未分类";
-  const availability = stringValue(extraction.availability);
+  const availability = normalizeAvailability(extraction.availability);
   const inventory = numberValue(extraction.inventory);
   const observedAt = validDate(extraction.observedAt) ?? input.createdAt;
-  const evidenceParts = [availability];
+  const evidenceParts = [availabilityLabel(availability)];
   if (inventory !== null) evidenceParts.push(`库存 ${inventory}`);
 
   return {
@@ -67,6 +68,7 @@ export function toApprovedCandidateRankingView(
     totalCny: totalPrice === null ? "—" : `¥${totalPrice.toFixed(2)}`,
     unitCny: totalPrice === null ? "—" : `¥${totalPrice.toFixed(2)}/件`,
     supplyEvidence: evidenceParts.filter(Boolean).join(" · ") || "暂无库存证据",
+    availability,
     confidence: null,
     lastVerified: observedAt.toISOString(),
     productUrl: input.productUrl,
@@ -81,10 +83,10 @@ export function toRankingView(input: RankingViewInput): RankingView {
     : Number(input.convertedPriceCny);
   const unitCount = Math.max(1, input.bundleQty * input.minBundleCount);
   const evidence = isRecord(input.stockEvidence) ? input.stockEvidence : {};
-  const availability = stringValue(evidence.availability);
+  const availability = normalizeAvailability(evidence.availability);
   const stockQuantity = numberValue(evidence.stockQuantity);
   const confidenceValue = numberValue(evidence.confidence);
-  const evidenceParts = [availability];
+  const evidenceParts = [availabilityLabel(availability)];
   if (stockQuantity !== null) evidenceParts.push(`库存 ${stockQuantity}`);
 
   return {
@@ -104,6 +106,7 @@ export function toRankingView(input: RankingViewInput): RankingView {
         ? `¥${(total / unitCount).toFixed(2)}/份`
         : "—",
     supplyEvidence: evidenceParts.filter(Boolean).join(" · ") || "无库存证据",
+    availability,
     confidence:
       confidenceValue === null
         ? null
@@ -115,6 +118,22 @@ export function toRankingView(input: RankingViewInput): RankingView {
     sourceUrl: input.sourceUrl,
     merchantUrl: input.merchantUrl,
   };
+}
+
+function normalizeAvailability(
+  value: unknown,
+): RankingView["availability"] {
+  if (value === "IN_STOCK") return "IN_STOCK";
+  if (value === "OUT_OF_STOCK" || value === "UNAVAILABLE") {
+    return "OUT_OF_STOCK";
+  }
+  return "UNKNOWN";
+}
+
+function availabilityLabel(value: RankingView["availability"]): string {
+  if (value === "IN_STOCK") return "有货";
+  if (value === "OUT_OF_STOCK") return "无货";
+  return "待核验";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
