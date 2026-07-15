@@ -280,6 +280,11 @@ async function syncCandidatePrice(candidate: Candidate): Promise<Candidate> {
       typeof checkout.original_amount !== "number" ||
       typeof checkout.total_amount !== "number"
     ) return candidate;
+    const availability = await probeLdxpAvailability(
+      goodsKey,
+      goods.status,
+      checkout.total_amount,
+    );
 
     const merchantUrl = verifiedLdxpMerchantUrl(user.link) ??
       candidate.merchantUrl;
@@ -290,7 +295,7 @@ async function syncCandidatePrice(candidate: Candidate): Promise<Candidate> {
       price: String(goods.price),
       merchantName: user.nickname,
       merchantUrl,
-      availability: goods.status === 1 ? "IN_STOCK" : "OUT_OF_STOCK",
+      availability,
       observedAt,
     };
     if (merchantUrl) {
@@ -312,6 +317,31 @@ async function syncCandidatePrice(candidate: Candidate): Promise<Candidate> {
   } catch {
     return candidate;
   }
+}
+
+async function probeLdxpAvailability(
+  goodsKey: string,
+  goodsStatus: number,
+  totalAmount: number,
+): Promise<"IN_STOCK" | "OUT_OF_STOCK" | "UNKNOWN"> {
+  if (goodsStatus !== 1) return "OUT_OF_STOCK";
+  if (totalAmount === 0) return "UNKNOWN";
+
+  const probe = await postLdxp("/shopApi/Pay/order", {
+    goods_key: goodsKey,
+    quantity: 1,
+    coupon_code: "",
+    channel_id: 0,
+    contact: "inventory-probe",
+    extend: {},
+  });
+  if (probe.code !== 0) throw new Error("LDXP_ORDER_PROBE_UNEXPECTED_SUCCESS");
+  return isOutOfStockMessage(probe.msg) ? "OUT_OF_STOCK" : "IN_STOCK";
+}
+
+function isOutOfStockMessage(message: unknown): boolean {
+  return typeof message === "string" &&
+    /库存不足|库存不够|无库存|缺货|售罄|已售完/.test(message);
 }
 
 async function postLdxp(

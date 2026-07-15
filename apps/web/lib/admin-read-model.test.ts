@@ -165,6 +165,11 @@ describe("admin read model", () => {
           total_amount: 1.44,
           fee: 0.04,
         },
+      }))
+      .mockResolvedValueOnce(Response.json({
+        code: 0,
+        msg: "该商户未启用此支付渠道",
+        data: null,
       }));
 
     await expect(
@@ -182,6 +187,20 @@ describe("admin read model", () => {
       availability: "IN_STOCK",
     });
     expect(request).toHaveBeenNthCalledWith(
+      4,
+      "https://www.ldxp.cn/shopApi/Pay/order",
+      expect.objectContaining({
+        body: JSON.stringify({
+          goods_key: "f1vz1u",
+          quantity: 1,
+          coupon_code: "",
+          channel_id: 0,
+          contact: "inventory-probe",
+          extend: {},
+        }),
+      }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
       3,
       "https://www.ldxp.cn/shopApi/Shop/getGoodsPrice",
       expect.objectContaining({
@@ -193,6 +212,42 @@ describe("admin read model", () => {
         }),
       }),
     );
+  });
+
+  it("marks an active listing out of stock when order preflight rejects inventory", async () => {
+    const responses = [
+      {
+        code: 1,
+        data: {
+          goods_key: "w712n7",
+          status: 1,
+          name: "K12 商品",
+          price: 0.6,
+          user: {
+            nickname: "奥特曼严选",
+            token: "SHOP1",
+            link: "https://pay.ldxp.cn/shop/SHOP1",
+          },
+        },
+      },
+      { code: 1, data: [{ id: 1 }] },
+      {
+        code: 1,
+        data: { original_amount: 0.6, total_amount: 0.6, fee: 0.02 },
+      },
+      { code: 0, msg: "库存不足", data: null },
+    ];
+    const request = vi.fn<typeof fetch>();
+    for (const response of responses) {
+      request.mockResolvedValueOnce(Response.json(response));
+    }
+
+    await expect(
+      fetchLdxpListingSnapshot(
+        "https://pay.ldxp.cn/item/w712n7",
+        request,
+      ),
+    ).resolves.toMatchObject({ availability: "OUT_OF_STOCK" });
   });
 
   it("updates live snapshots only for reviewable or approved candidates", async () => {

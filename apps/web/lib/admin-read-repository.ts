@@ -70,6 +70,12 @@ const ldxpPriceSchema = z.object({
   }),
 });
 
+const ldxpOrderProbeSchema = z.object({
+  code: z.number(),
+  msg: z.string(),
+  data: z.unknown().nullable().optional(),
+});
+
 export const ldxpListingSnapshotSchema = z.object({
   price: z.number().nonnegative(),
   totalPrice: z.number().nonnegative(),
@@ -77,7 +83,7 @@ export const ldxpListingSnapshotSchema = z.object({
   pageTitle: z.string().min(1),
   merchantName: z.string().min(1),
   merchantUrl: z.string().url(),
-  availability: z.enum(["IN_STOCK", "OUT_OF_STOCK"]),
+  availability: z.enum(["IN_STOCK", "OUT_OF_STOCK", "UNKNOWN"]),
 });
 
 export type LdxpListingSnapshot = z.infer<typeof ldxpListingSnapshotSchema>;
@@ -115,6 +121,12 @@ export async function fetchLdxpListingSnapshot(
       channel_id: channelId,
     }),
   ).data;
+  const availability = await probeLdxpAvailability(
+    request,
+    goodsKey,
+    goods.status,
+    checkout.total_amount,
+  );
 
   return {
     price: goods.price,
@@ -129,8 +141,35 @@ export async function fetchLdxpListingSnapshot(
     pageTitle: goods.name,
     merchantName: goods.user.nickname,
     merchantUrl: goods.user.link,
-    availability: goods.status === 1 ? "IN_STOCK" : "OUT_OF_STOCK",
+    availability,
   };
+}
+
+async function probeLdxpAvailability(
+  request: typeof fetch,
+  goodsKey: string,
+  goodsStatus: number,
+  totalAmount: number,
+): Promise<LdxpListingSnapshot["availability"]> {
+  if (goodsStatus !== 1) return "OUT_OF_STOCK";
+  if (totalAmount === 0) return "UNKNOWN";
+
+  const probe = ldxpOrderProbeSchema.parse(
+    await postLdxp(request, "/shopApi/Pay/order", {
+      goods_key: goodsKey,
+      quantity: 1,
+      coupon_code: "",
+      channel_id: 0,
+      contact: "inventory-probe",
+      extend: {},
+    }),
+  );
+  if (probe.code !== 0) throw new Error("LDXP_ORDER_PROBE_UNEXPECTED_SUCCESS");
+  return isOutOfStockMessage(probe.msg) ? "OUT_OF_STOCK" : "IN_STOCK";
+}
+
+function isOutOfStockMessage(message: string): boolean {
+  return /库存不足|库存不够|无库存|缺货|售罄|已售完/.test(message);
 }
 
 export async function refreshApprovedCandidatePrices(): Promise<{

@@ -6,6 +6,8 @@ import { DataTable, type Column } from "./data-table";
 import { ExternalLink } from "./external-link";
 import type { RankingView } from "../lib/admin-read-model";
 
+const LIVE_REFRESH_INTERVAL_MS = 5 * 60 * 1_000;
+
 const priceColumns: Column<RankingView>[] = [
   { key: "unitCny", header: "有效单位价", render: (row) => <span className="font-mono text-sm font-bold text-green-700">{row.unitCny}</span> },
   { key: "spec", header: "规格", render: (row) => <span className="text-xs text-gray-800">{row.spec}</span> },
@@ -77,7 +79,9 @@ export function DashboardView({
       if (running || document.visibilityState !== "visible") return;
       running = true;
       const targets = rowsRef.current.filter(
-        (row) => Date.now() - new Date(row.lastVerified).getTime() >= 55_000,
+        (row) =>
+          Date.now() - new Date(row.lastVerified).getTime() >=
+            LIVE_REFRESH_INTERVAL_MS,
       );
       let updated = 0;
       const failures = new Set<string>();
@@ -103,7 +107,7 @@ export function DashboardView({
       }
     };
     void refreshPrices();
-    const timer = window.setInterval(refreshPrices, 60_000);
+    const timer = window.setInterval(refreshPrices, LIVE_REFRESH_INTERVAL_MS);
     return () => {
       stopped = true;
       window.clearInterval(timer);
@@ -170,6 +174,11 @@ async function refreshLdxpCandidate(row: RankingView): Promise<boolean> {
     typeof checkout.original_amount !== "number" ||
     typeof checkout.total_amount !== "number"
   ) throw new Error("INVALID_PRICE_RESPONSE");
+  const availability = await probeLdxpAvailability(
+    goodsKey,
+    goods.status,
+    checkout.total_amount,
+  );
 
   const response = await fetch("/api/candidates", {
     method: "PUT",
@@ -190,12 +199,37 @@ async function refreshLdxpCandidate(row: RankingView): Promise<boolean> {
         pageTitle: goods.name,
         merchantName: user.nickname,
         merchantUrl: user.link,
-        availability: goods.status === 1 ? "IN_STOCK" : "OUT_OF_STOCK",
+        availability,
       },
     }),
   });
   if (!response.ok) throw new Error(`WRITE_HTTP_${response.status}`);
   return response.ok;
+}
+
+async function probeLdxpAvailability(
+  goodsKey: string,
+  goodsStatus: number,
+  totalAmount: number,
+): Promise<RankingView["availability"]> {
+  if (goodsStatus !== 1) return "OUT_OF_STOCK";
+  if (totalAmount === 0) return "UNKNOWN";
+
+  const probe = await postLdxp("/shopApi/Pay/order", {
+    goods_key: goodsKey,
+    quantity: 1,
+    coupon_code: "",
+    channel_id: 0,
+    contact: "inventory-probe",
+    extend: {},
+  });
+  if (probe.code !== 0) throw new Error("LDXP_ORDER_PROBE_UNEXPECTED_SUCCESS");
+  return isOutOfStockMessage(probe.msg) ? "OUT_OF_STOCK" : "IN_STOCK";
+}
+
+function isOutOfStockMessage(message: unknown): boolean {
+  return typeof message === "string" &&
+    /库存不足|库存不够|无库存|缺货|售罄|已售完/.test(message);
 }
 
 async function postLdxp(
