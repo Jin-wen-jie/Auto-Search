@@ -5,6 +5,10 @@ import {
   listCandidates,
 } from "../../../lib/candidate-repository";
 import {
+  ldxpListingSnapshotSchema,
+  updateApprovedCandidateSnapshot,
+} from "../../../lib/admin-read-repository";
+import {
   assertAdminMutation,
 } from "../../../lib/server-auth";
 
@@ -16,6 +20,11 @@ const createSchema = z.object({
       const protocol = new URL(value).protocol;
       return protocol === "http:" || protocol === "https:";
     }),
+});
+
+const priceSnapshotSchema = z.object({
+  id: z.string().min(1),
+  snapshot: ldxpListingSnapshotSchema,
 });
 
 export async function GET(request: Request) {
@@ -50,5 +59,30 @@ export async function POST(request: Request) {
   return NextResponse.json(
     { ...result.candidate, duplicate: !result.created },
     { status: result.created ? 201 : 200 },
+  );
+}
+
+export async function PUT(request: Request) {
+  const authorization = await assertAdminMutation(request);
+  if (!authorization.ok) {
+    return NextResponse.json(
+      { error: authorization.error },
+      { status: authorization.status },
+    );
+  }
+  const body = priceSnapshotSchema.safeParse(
+    await request.json().catch(() => ({})),
+  );
+  if (!body.success) {
+    return NextResponse.json({ error: "INVALID_PRICE_SNAPSHOT" }, { status: 400 });
+  }
+
+  const updated = await updateApprovedCandidateSnapshot(
+    body.data.id,
+    body.data.snapshot,
+  );
+  return NextResponse.json(
+    { updated },
+    { status: updated ? 200 : 404 },
   );
 }

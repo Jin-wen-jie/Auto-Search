@@ -70,15 +70,17 @@ const ldxpPriceSchema = z.object({
   }),
 });
 
-export interface LdxpListingSnapshot {
-  price: number;
-  totalPrice: number;
-  mandatoryFee: number;
-  pageTitle: string;
-  merchantName: string;
-  merchantUrl: string;
-  availability: "IN_STOCK" | "OUT_OF_STOCK";
-}
+export const ldxpListingSnapshotSchema = z.object({
+  price: z.number().nonnegative(),
+  totalPrice: z.number().nonnegative(),
+  mandatoryFee: z.number().nonnegative(),
+  pageTitle: z.string().min(1),
+  merchantName: z.string().min(1),
+  merchantUrl: z.string().url(),
+  availability: z.enum(["IN_STOCK", "OUT_OF_STOCK"]),
+});
+
+export type LdxpListingSnapshot = z.infer<typeof ldxpListingSnapshotSchema>;
 
 export async function fetchLdxpListingSnapshot(
   productUrl: string,
@@ -151,28 +153,7 @@ export async function refreshApprovedCandidatePrices(): Promise<{
   const results = await Promise.allSettled(
     candidates.map(async (candidate) => {
       const snapshot = await fetchLdxpListingSnapshot(candidate.productUrl);
-      const observedAt = new Date();
-      const existing = isRecord(candidate.extractionResult)
-        ? candidate.extractionResult
-        : {};
-      const [updated] = await db
-        .update(discoveryCandidates)
-        .set({
-          extractionResult: {
-            ...existing,
-            ...snapshot,
-            observedAt: observedAt.toISOString(),
-          },
-          updatedAt: observedAt,
-        })
-        .where(
-          and(
-            eq(discoveryCandidates.id, candidate.id),
-            eq(discoveryCandidates.status, "APPROVED"),
-          ),
-        )
-        .returning({ id: discoveryCandidates.id });
-      return Boolean(updated);
+      return updateApprovedCandidateSnapshot(candidate.id, snapshot);
     }),
   );
 
@@ -193,6 +174,48 @@ export async function refreshApprovedCandidatePrices(): Promise<{
       ),
     ],
   };
+}
+
+export async function updateApprovedCandidateSnapshot(
+  id: string,
+  snapshotInput: LdxpListingSnapshot,
+): Promise<boolean> {
+  const snapshot = ldxpListingSnapshotSchema.parse(snapshotInput);
+  const db = getDatabase();
+  const [candidate] = await db
+    .select({ extractionResult: discoveryCandidates.extractionResult })
+    .from(discoveryCandidates)
+    .where(
+      and(
+        eq(discoveryCandidates.id, id),
+        eq(discoveryCandidates.status, "APPROVED"),
+      ),
+    )
+    .limit(1);
+  if (!candidate) return false;
+
+  const observedAt = new Date();
+  const existing = isRecord(candidate.extractionResult)
+    ? candidate.extractionResult
+    : {};
+  const [updated] = await db
+    .update(discoveryCandidates)
+    .set({
+      extractionResult: {
+        ...existing,
+        ...snapshot,
+        observedAt: observedAt.toISOString(),
+      },
+      updatedAt: observedAt,
+    })
+    .where(
+      and(
+        eq(discoveryCandidates.id, id),
+        eq(discoveryCandidates.status, "APPROVED"),
+      ),
+    )
+    .returning({ id: discoveryCandidates.id });
+  return Boolean(updated);
 }
 
 async function postLdxp(

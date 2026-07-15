@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DataTable, type Column } from "./data-table";
 import { ExternalLink } from "./external-link";
@@ -31,28 +31,47 @@ const supplyColumns: Column<RankingView>[] = [
 export function DashboardView({
   rows,
   counts,
-  refresh,
 }: {
   rows: RankingView[];
   counts: { candidates: number; merchants: number; listings: number };
-  refresh: { attempted: number; updated: number; failures: string[] };
 }) {
   const [tab, setTab] = useState<"price" | "supply">("price");
   const router = useRouter();
+  const rowsRef = useRef(rows);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") router.refresh();
-    }, 60_000);
-    return () => window.clearInterval(timer);
+    rowsRef.current = rows;
+  }, [rows]);
+
+  useEffect(() => {
+    let stopped = false;
+    let running = false;
+    const refreshPrices = async () => {
+      if (running || document.visibilityState !== "visible") return;
+      running = true;
+      const results = await Promise.allSettled(
+        rowsRef.current.map(refreshLdxpCandidate),
+      );
+      running = false;
+      if (
+        !stopped &&
+        results.some(
+          (result) => result.status === "fulfilled" && result.value,
+        )
+      ) {
+        router.refresh();
+      }
+    };
+    void refreshPrices();
+    const timer = window.setInterval(refreshPrices, 60_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
   }, [router]);
 
   return (
-    <div
-      data-refresh-attempted={refresh.attempted}
-      data-refresh-updated={refresh.updated}
-      data-refresh-failures={refresh.failures.join(",")}
-    >
+    <div>
       <h2 className="mb-1 text-xl font-bold text-gray-900">K12 / Bug Team 比价总览</h2>
       <p className="mb-4 text-xs text-gray-500">
         PostgreSQL 事实数据：{counts.candidates} 条候选 · {counts.merchants} 个保留商家 · {counts.listings} 条已通过商品。总览直接展示候选审核中点击“通过”的 K12 / Bug Team 商品。
@@ -64,4 +83,105 @@ export function DashboardView({
       <DataTable columns={tab === "price" ? priceColumns : supplyColumns} rows={rows} getRowKey={(row) => row.id} />
     </div>
   );
+}
+
+async function refreshLdxpCandidate(row: RankingView): Promise<boolean> {
+  const productUrl = new URL(row.productUrl);
+  const match = productUrl.pathname.match(/^\/item\/([A-Za-z0-9]+)\/?$/);
+  if (productUrl.origin !== "https://pay.ldxp.cn" || !match?.[1]) return false;
+
+  const goodsKey = match[1];
+  const goodsResult = await postLdxp("/shopApi/Shop/goodsInfo", {
+    goods_key: goodsKey,
+    trade_no: null,
+  });
+  const goods = recordValue(goodsResult.data);
+  const user = recordValue(goods.user);
+  if (
+    goodsResult.code !== 1 ||
+    goods.goods_key !== goodsKey ||
+    typeof goods.name !== "string" ||
+    typeof goods.price !== "number" ||
+    typeof goods.status !== "number" ||
+    typeof user.nickname !== "string" ||
+    typeof user.token !== "string" ||
+    typeof user.link !== "string"
+  ) return false;
+
+  const channelResult = await postLdxp("/shopApi/Shop/getUserChannel", {
+    token: user.token,
+  });
+  const channels = Array.isArray(channelResult.data) ? channelResult.data : [];
+  const firstChannel = recordValue(channels[0]);
+  const channelId = typeof firstChannel.id === "number" ? firstChannel.id : 0;
+  const priceResult = await postLdxp("/shopApi/Shop/getGoodsPrice", {
+    goods_key: goodsKey,
+    quantity: 1,
+    coupon_code: "",
+    channel_id: channelId,
+  });
+  const checkout = recordValue(priceResult.data);
+  if (
+    priceResult.code !== 1 ||
+    typeof checkout.original_amount !== "number" ||
+    typeof checkout.total_amount !== "number"
+  ) return false;
+
+  const response = await fetch("/api/candidates", {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      "x-csrf-token": readCsrfToken(),
+    },
+    body: JSON.stringify({
+      id: row.id,
+      snapshot: {
+        price: goods.price,
+        totalPrice: checkout.total_amount,
+        mandatoryFee: Math.max(
+          0,
+          Math.round((checkout.total_amount - checkout.original_amount) * 100) /
+            100,
+        ),
+        pageTitle: goods.name,
+        merchantName: user.nickname,
+        merchantUrl: user.link,
+        availability: goods.status === 1 ? "IN_STOCK" : "OUT_OF_STOCK",
+      },
+    }),
+  });
+  return response.ok;
+}
+
+async function postLdxp(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const response = await fetch(`https://www.ldxp.cn${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    credentials: "omit",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`LDXP_HTTP_${response.status}`);
+  return recordValue(await response.json());
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function readCsrfToken(): string {
+  for (const name of ["__Host-admin_csrf", "admin_csrf"]) {
+    const prefix = `${name}=`;
+    const cookie = document.cookie
+      .split(";")
+      .map((value) => value.trim())
+      .find((value) => value.startsWith(prefix));
+    if (cookie) return decodeURIComponent(cookie.slice(prefix.length));
+  }
+  return "";
 }
