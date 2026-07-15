@@ -305,6 +305,10 @@ describe("worker repository mappings", () => {
     );
     vi.mocked(createDb).mockReturnValue({ $client: { end } } as never);
     const repository = createWorkerRepository("postgres://worker-db");
+    expect(createDb).toHaveBeenCalledWith("postgres://worker-db", {
+      maxConnections: 4,
+      idleTimeoutSeconds: 5,
+    });
 
     const closing = repository.close();
     let settled = false;

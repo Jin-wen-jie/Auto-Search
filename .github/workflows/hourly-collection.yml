@@ -54,14 +54,38 @@ jobs:
           pnpm --filter @compare/validator build
 
       - name: Migrate database
+        shell: bash
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: pnpm db:migrate
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if pnpm db:migrate; then
+              exit 0
+            fi
+            if [[ "${attempt}" == "5" ]]; then
+              exit 1
+            fi
+            echo "Database migration unavailable; retrying after backoff."
+            sleep $((attempt * 10))
+          done
 
       - name: Seed database
+        shell: bash
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: pnpm db:seed
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if pnpm db:seed; then
+              exit 0
+            fi
+            if [[ "${attempt}" == "5" ]]; then
+              exit 1
+            fi
+            echo "Database seed unavailable; retrying after backoff."
+            sleep $((attempt * 10))
+          done
 
       - name: Run bounded collection
         shell: bash

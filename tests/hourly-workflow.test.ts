@@ -173,8 +173,18 @@ describe("hourly collection workflow", () => {
     const build = stepNamed("Build worker and validator").run;
     expect(build).toContain("pnpm --filter @compare/worker... build");
     expect(build).toContain("pnpm --filter @compare/validator build");
-    expect(stepNamed("Migrate database").run).toBe("pnpm db:migrate");
-    expect(stepNamed("Seed database").run).toBe("pnpm db:seed");
+    const migration = stepNamed("Migrate database").run ?? "";
+    const seed = stepNamed("Seed database").run ?? "";
+    for (const [script, command] of [
+      [migration, "pnpm db:migrate"],
+      [seed, "pnpm db:seed"],
+    ]) {
+      expect(script).toContain("set -euo pipefail");
+      expect(script).toContain("for attempt in 1 2 3 4 5");
+      expect(script).toContain(command);
+      expect(script).toContain("sleep $((attempt * 10))");
+      expect(script).not.toContain("DATABASE_URL");
+    }
 
     const collection = stepNamed("Run bounded collection").run;
     expect(collection).toContain("set -euo pipefail");

@@ -80,7 +80,10 @@ export function createWorkerRepository(
   databaseUrl: string,
   options: WorkerRepositoryOptions = {},
 ): WorkerRepositoryRuntime {
-  const db = createDb(databaseUrl);
+  const db = createDb(databaseUrl, {
+    maxConnections: 4,
+    idleTimeoutSeconds: 5,
+  });
   return {
     ...createWorkerRepositoryFromDb(db, options),
     async close() {

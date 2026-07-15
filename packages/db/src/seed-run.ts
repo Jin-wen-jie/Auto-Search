@@ -14,7 +14,10 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const db = createDb(databaseUrl);
+const db = createDb(databaseUrl, {
+  maxConnections: 2,
+  idleTimeoutSeconds: 5,
+});
 
 try {
   await seedWatchSources(db);
